@@ -2,16 +2,14 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { MotionConfig, motion, useScroll, useSpring } from 'framer-motion'
 import { initSmoothScroll } from './scroll'
 import { QuoteContext } from './components/ui'
-import Intro from './components/Intro'
 import Nav from './components/Nav'
 import Hero from './components/Hero'
 import Marquee from './components/Marquee'
 import Devices from './components/Devices'
 import Pillars from './components/Pillars'
-import Showcase from './components/Showcase'
+import BeforeAfter from './components/BeforeAfter'
 import Why from './components/Why'
 import Process from './components/Process'
-import Gallery from './components/Gallery'
 import Visit from './components/Visit'
 import Faq from './components/Faq'
 import Cta from './components/Cta'
@@ -32,7 +30,6 @@ export default function App() {
   return (
     <MotionConfig reducedMotion="user">
       <QuoteContext.Provider value={ctx}>
-        <Intro />
         <motion.div className="page-progress" style={{ scaleX: progress }} />
         <Nav />
         <main>
@@ -40,10 +37,9 @@ export default function App() {
           <Marquee />
           <Devices />
           <Pillars />
-          <Showcase />
+          <BeforeAfter />
           <Why />
           <Process />
-          <Gallery />
           <Visit />
           <Faq />
           <Cta />

@@ -1,20 +1,21 @@
-import { createContext, useContext, useRef } from 'react'
+import { createContext, useContext, useEffect, useRef, useState } from 'react'
 import { motion, useMotionValue, useSpring } from 'framer-motion'
+import { openStatus } from '../data'
 
 export const ease = [0.22, 1, 0.36, 1]
 
 export const QuoteContext = createContext({ open: () => {} })
 export const useQuote = () => useContext(QuoteContext)
 
-export function Reveal({ children, delay = 0, y = 36, className, as = 'div', ...rest }) {
+export function Reveal({ children, delay = 0, y = 28, className, as = 'div', ...rest }) {
   const Tag = motion[as]
   return (
     <Tag
       className={className}
-      initial={{ opacity: 0, y, filter: 'blur(10px)' }}
-      whileInView={{ opacity: 1, y: 0, filter: 'blur(0px)' }}
-      viewport={{ once: true, margin: '-12% 0px' }}
-      transition={{ duration: 1.1, delay, ease }}
+      initial={{ opacity: 0, y }}
+      whileInView={{ opacity: 1, y: 0 }}
+      viewport={{ once: true, margin: '-8% 0px' }}
+      transition={{ duration: 0.9, delay, ease }}
       {...rest}
     >
       {children}
@@ -49,14 +50,27 @@ export function SplitWords({ text, className, delay = 0, as = 'h2', immediate = 
 
 export function Eyebrow({ children, className = '' }) {
   return (
-    <Reveal className={`eyebrow ${className}`} y={16}>
-      <span className="eyebrow-line" />
+    <Reveal className={`eyebrow ${className}`} y={12}>
       {children}
     </Reveal>
   )
 }
 
-export function Magnetic({ children, strength = 0.3, className, ...rest }) {
+export function OpenPill({ className = '' }) {
+  const [status, setStatus] = useState(() => openStatus())
+  useEffect(() => {
+    const id = setInterval(() => setStatus(openStatus()), 60_000)
+    return () => clearInterval(id)
+  }, [])
+  return (
+    <span className={`open-pill ${status.open ? 'is-open' : 'is-closed'} ${className}`}>
+      <span className="open-dot" />
+      {status.label}
+    </span>
+  )
+}
+
+export function Magnetic({ children, strength = 0.15, className, ...rest }) {
   const ref = useRef(null)
   const x = useMotionValue(0)
   const y = useMotionValue(0)
@@ -87,7 +101,7 @@ export function Button({ variant = 'gold', href, onClick, children, icon, ...res
     </>
   )
   return (
-    <Magnetic strength={0.25}>
+    <Magnetic>
       {href ? (
         <a className={cls} href={href} onClick={onClick} {...rest}>
           {inner}
@@ -101,7 +115,7 @@ export function Button({ variant = 'gold', href, onClick, children, icon, ...res
   )
 }
 
-const stroke = { fill: 'none', stroke: 'currentColor', strokeWidth: 1.25, strokeLinecap: 'round', strokeLinejoin: 'round' }
+const stroke = { fill: 'none', stroke: 'currentColor', strokeWidth: 1.6, strokeLinecap: 'round', strokeLinejoin: 'round' }
 
 export const Icon = {
   smartphones: (p) => (
@@ -200,6 +214,11 @@ export const Icon = {
   plus: (p) => (
     <svg viewBox="0 0 24 24" {...stroke} strokeWidth={1.5} {...p}>
       <path d="M12 5v14M5 12h14" />
+    </svg>
+  ),
+  check: (p) => (
+    <svg viewBox="0 0 24 24" {...stroke} strokeWidth={2} {...p}>
+      <path d="M5 12.5l4.5 4.5L19 7.5" />
     </svg>
   ),
   close: (p) => (

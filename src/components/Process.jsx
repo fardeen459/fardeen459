@@ -26,8 +26,8 @@ export default function Process() {
     <section className="section process" id="process" ref={ref}>
       <div className="container">
         <div className="section-head center">
-          <Eyebrow>How It Works</Eyebrow>
-          <SplitWords className="display-lg" text="Three steps to like-new." />
+          <Eyebrow>3 simple steps</Eyebrow>
+          <SplitWords className="display-lg" text="How It Works" />
           <Reveal as="p" className="lead" delay={0.2}>
             Getting your phone repaired is easy with our simple 3-step process.
           </Reveal>

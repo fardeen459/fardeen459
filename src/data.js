@@ -104,3 +104,36 @@ export const GALLERY = [
   { src: 'images/technician.jpg', alt: 'Technician performing a precision board-level repair', label: 'Precision', caption: 'Board-level craftsmanship' },
   { src: 'images/phone-lineup.jpg', alt: 'Variety of iPhone models repaired at Downtown Mobile Turlock CA', label: 'Every Model', caption: 'iPhone, Samsung, Pixel & more' },
 ]
+
+// Disassembly order front to back, matching the exploded 3D phone in the hero.
+export const PARTS = [
+  { part: 'Display assembly', fix: 'Cracked screens & dead pixels' },
+  { part: 'Logic board', fix: 'Water damage & board repair' },
+  { part: 'Battery', fix: 'Fast drain & swelling' },
+  { part: 'Chassis', fix: 'Charging port & buttons' },
+  { part: 'Back glass', fix: 'Back glass & camera lenses' },
+]
+
+// [open, close] in 24h, indexed by getDay() (0 = Sunday).
+const SCHEDULE = [null, [10, 18], [10, 18], [10, 18], [10, 18], [10, 18], [10, 16]]
+
+export function openStatus(now = new Date()) {
+  const parts = Object.fromEntries(
+    new Intl.DateTimeFormat('en-US', { timeZone: 'America/Los_Angeles', weekday: 'short', hour: 'numeric', minute: 'numeric', hour12: false })
+      .formatToParts(now)
+      .map((p) => [p.type, p.value])
+  )
+  const day = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].indexOf(parts.weekday)
+  const hour = (Number(parts.hour) % 24) + Number(parts.minute) / 60
+  const fmt = (h) => `${h > 12 ? h - 12 : h} ${h >= 12 ? 'PM' : 'AM'}`
+  const today = SCHEDULE[day]
+  if (today && hour >= today[0] && hour < today[1]) return { open: true, label: `Open now · until ${fmt(today[1])}` }
+  for (let i = today && hour < today[0] ? 0 : 1; i <= 7; i++) {
+    const d = (day + i) % 7
+    if (SCHEDULE[d]) {
+      const when = i === 0 ? 'today' : i === 1 ? 'tomorrow' : ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'][d]
+      return { open: false, label: `Closed · opens ${when} ${fmt(SCHEDULE[d][0])}` }
+    }
+  }
+  return { open: false, label: 'Closed' }
+}

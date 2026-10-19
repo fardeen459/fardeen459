@@ -12,7 +12,7 @@ export default function Cta() {
 
   return (
     <section className="cta" ref={ref} id="contact">
-      <motion.div className="cta-orb" style={{ rotate, scale }} />
+      <motion.div className="cta-orb" style={{ rotate, scale }} aria-hidden="true" />
       <div className="container cta-inner">
         <SplitWords className="display-xl" text="Ready to Fix Your Phone?" />
         <Reveal as="p" className="lead" delay={0.2}>

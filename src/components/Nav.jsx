@@ -6,7 +6,7 @@ import { scrollTo } from '../scroll'
 
 const LINKS = [
   ['Services', '#services'],
-  ['Studio', '#studio'],
+  ['Results', '#studio'],
   ['Process', '#process'],
   ['Visit', '#visit'],
   ['FAQ', '#faq'],
@@ -41,10 +41,8 @@ export default function Nav() {
       >
         <div className="container nav-inner">
           <a href="#top" className="brand" onClick={(e) => go(e, '#top')}>
-            <span className="brand-mark">DM</span>
-            <span className="brand-name">
-              Downtown <em>Mobile</em>
-            </span>
+            <span className="brand-mark" aria-hidden="true">DM</span>
+            <span className="brand-name">Downtown Mobile</span>
           </a>
           <nav className="nav-links" aria-label="Primary">
             {LINKS.map(([label, href]) => (

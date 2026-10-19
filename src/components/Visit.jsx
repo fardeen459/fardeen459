@@ -1,5 +1,5 @@
 import { BUSINESS } from '../data'
-import { Button, Eyebrow, Icon, Reveal, SplitWords } from './ui'
+import { Button, Eyebrow, Icon, OpenPill, Reveal, SplitWords } from './ui'
 
 export default function Visit() {
   return (
@@ -9,6 +9,7 @@ export default function Visit() {
           <Eyebrow>Visit Us</Eyebrow>
           <SplitWords className="display-lg" text="Visit Our Turlock Location" />
           <Reveal className="visit-card" delay={0.15}>
+            <OpenPill />
             <div className="visit-row">
               <Icon.pin />
               <div>

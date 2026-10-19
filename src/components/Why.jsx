@@ -9,9 +9,9 @@ function TiltCard({ children, className }) {
   const ref = useRef(null)
   const mx = useMotionValue(0.5)
   const my = useMotionValue(0.5)
-  const rx = useSpring(useTransform(my, [0, 1], [7, -7]), { stiffness: 150, damping: 18 })
-  const ry = useSpring(useTransform(mx, [0, 1], [-7, 7]), { stiffness: 150, damping: 18 })
-  const glare = useTransform([mx, my], ([x, y]) => `radial-gradient(600px circle at ${x * 100}% ${y * 100}%, rgba(232,201,143,0.16), transparent 45%)`)
+  const rx = useSpring(useTransform(my, [0, 1], [4, -4]), { stiffness: 150, damping: 18 })
+  const ry = useSpring(useTransform(mx, [0, 1], [-4, 4]), { stiffness: 150, damping: 18 })
+  const glare = useTransform([mx, my], ([x, y]) => `radial-gradient(600px circle at ${x * 100}% ${y * 100}%, rgba(255,90,31,0.08), transparent 45%)`)
   const move = (e) => {
     const r = ref.current.getBoundingClientRect()
     mx.set((e.clientX - r.left) / r.width)
@@ -50,7 +50,6 @@ export default function Why() {
                 <TiltCard className="why-card">
                   <div className="why-top">
                     <I className="why-icon" />
-                    <span className="why-num">0{i + 1}</span>
                   </div>
                   <h3>{w.title}</h3>
                   <p>{w.text}</p>

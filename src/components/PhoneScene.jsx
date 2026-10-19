@@ -1,201 +1,294 @@
-import { useMemo, useRef } from 'react'
+import { useEffect, useMemo, useRef } from 'react'
 import { Canvas, useFrame, useThree } from '@react-three/fiber'
-import { Environment, Float, Lightformer, RoundedBox, Sparkles } from '@react-three/drei'
+import { ContactShadows, Environment, Lightformer, RoundedBox } from '@react-three/drei'
 import * as THREE from 'three'
 
 const W = 1.5
 const H = 3.1
 const D = 0.16
 
-const screenVertex = /* glsl */ `
-  varying vec2 vUv;
-  void main() {
-    vUv = uv;
-    gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
-  }
-`
-
-// Liquid-gold wallpaper with rounded-corner mask, dynamic island and a moving sheen.
-const screenFragment = /* glsl */ `
-  uniform float uTime;
-  uniform float uAspect;
-  varying vec2 vUv;
-
-  float sdRound(vec2 p, vec2 b, float r) {
-    vec2 q = abs(p) - b + r;
-    return length(max(q, 0.0)) + min(max(q.x, q.y), 0.0) - r;
-  }
-
-  void main() {
-    vec2 p = vUv - 0.5;
-    p.x *= uAspect;
-    float d = sdRound(p, vec2(0.5 * uAspect, 0.5), 0.075);
-    float alpha = 1.0 - smoothstep(0.0, 0.004, d);
-
-    float t = uTime * 0.25;
-    float w1 = sin(vUv.y * 6.0 + t * 2.0 + sin(vUv.x * 4.0 - t) * 1.5) * 0.5 + 0.5;
-    float w2 = sin((vUv.x + vUv.y) * 5.0 - t * 1.7) * 0.5 + 0.5;
-    float glow = smoothstep(0.25, 1.0, w1 * w2);
-
-    vec3 deep = vec3(0.012, 0.010, 0.008);
-    vec3 gold = vec3(0.62, 0.42, 0.20);
-    vec3 champagne = vec3(0.95, 0.78, 0.52);
-
-    vec3 col = mix(deep, gold * 0.45, (1.0 - vUv.y) * 0.45 + glow * 0.55);
-    col += champagne * pow(glow, 4.0) * 0.35;
-
-    float orb = length((vUv - vec2(0.5, 0.40)) * vec2(uAspect, 1.0));
-    col += gold * smoothstep(0.34, 0.0, orb) * 0.45;
-    col += champagne * smoothstep(0.08, 0.0, orb) * 0.25;
-
-    vec2 ip = vUv - vec2(0.5, 0.955);
-    ip.x *= uAspect;
-    float island = sdRound(ip, vec2(0.11, 0.017), 0.017);
-    col = mix(vec3(0.0), col, smoothstep(0.0, 0.003, island));
-
-    float sheen = smoothstep(0.035, 0.0, abs(vUv.x + vUv.y * 0.6 - mod(uTime * 0.12, 2.4) + 0.3));
-    col += sheen * 0.05;
-
-    gl_FragColor = vec4(col, alpha);
-    #include <tonemapping_fragment>
-    #include <colorspace_fragment>
-  }
-`
-
 const smooth = (a, b, x) => {
   const t = THREE.MathUtils.clamp((x - a) / (b - a), 0, 1)
   return t * t * (3 - 2 * t)
 }
 
+function roundRect(ctx, x, y, w, h, r) {
+  ctx.beginPath()
+  ctx.moveTo(x + r, y)
+  ctx.arcTo(x + w, y, x + w, y + h, r)
+  ctx.arcTo(x + w, y + h, x, y + h, r)
+  ctx.arcTo(x, y + h, x, y, r)
+  ctx.arcTo(x, y, x + w, y, r)
+  ctx.closePath()
+}
+
+// Lock screen drawn to a canvas so the UI stays crisp at any zoom.
+function drawScreen(canvas) {
+  const ctx = canvas.getContext('2d')
+  const w = canvas.width
+  const h = canvas.height
+  ctx.clearRect(0, 0, w, h)
+  ctx.save()
+  roundRect(ctx, 0, 0, w, h, 70)
+  ctx.clip()
+
+  const bg = ctx.createLinearGradient(0, 0, w, h)
+  bg.addColorStop(0, '#dfe7ff')
+  bg.addColorStop(0.55, '#f4f1ff')
+  bg.addColorStop(1, '#ffe1d2')
+  ctx.fillStyle = bg
+  ctx.fillRect(0, 0, w, h)
+  for (const [x, y, r, c] of [
+    [0.85, 0.2, 0.55, 'rgba(255,106,43,0.55)'],
+    [0.1, 0.65, 0.6, 'rgba(70,110,255,0.45)'],
+    [0.7, 0.95, 0.45, 'rgba(255,170,120,0.5)'],
+  ]) {
+    const g = ctx.createRadialGradient(x * w, y * h, 0, x * w, y * h, r * w)
+    g.addColorStop(0, c)
+    g.addColorStop(1, 'rgba(255,255,255,0)')
+    ctx.fillStyle = g
+    ctx.fillRect(0, 0, w, h)
+  }
+
+  ctx.fillStyle = '#0b0d12'
+  roundRect(ctx, w / 2 - 85, 26, 170, 48, 24)
+  ctx.fill()
+
+  ctx.fillStyle = '#0b0d12'
+  ctx.textAlign = 'center'
+  ctx.font = '500 30px "Geist", system-ui, sans-serif'
+  ctx.fillText('Tuesday, Turlock', w / 2, 190)
+  ctx.font = '600 170px "Bricolage Grotesque", system-ui, sans-serif'
+  ctx.fillText('10:24', w / 2, 345)
+
+  const cx = 40
+  const cy = h - 330
+  ctx.fillStyle = 'rgba(255,255,255,0.82)'
+  roundRect(ctx, cx, cy, w - 80, 150, 36)
+  ctx.fill()
+  ctx.fillStyle = '#ff5a1f'
+  roundRect(ctx, cx + 26, cy + 30, 64, 64, 16)
+  ctx.fill()
+  ctx.fillStyle = '#fff'
+  ctx.font = '700 30px "Bricolage Grotesque", system-ui, sans-serif'
+  ctx.fillText('DM', cx + 58, cy + 73)
+  ctx.textAlign = 'left'
+  ctx.fillStyle = '#0b0d12'
+  ctx.font = '600 28px "Geist", system-ui, sans-serif'
+  ctx.fillText('Downtown Mobile', cx + 112, cy + 58)
+  ctx.fillStyle = '#4a5060'
+  ctx.font = '400 26px "Geist", system-ui, sans-serif'
+  ctx.fillText('Your phone is ready for pickup', cx + 112, cy + 96)
+  ctx.fillStyle = '#12b76a'
+  ctx.font = '500 22px "Geist Mono", monospace'
+  ctx.fillText('REPAIRED · 42 MIN', cx + 112, cy + 128)
+
+  ctx.fillStyle = 'rgba(11,13,18,0.85)'
+  roundRect(ctx, w / 2 - 110, h - 46, 220, 10, 5)
+  ctx.fill()
+  ctx.restore()
+}
+
+function drawBattery(canvas) {
+  const ctx = canvas.getContext('2d')
+  const w = canvas.width
+  const h = canvas.height
+  ctx.fillStyle = '#20232b'
+  ctx.fillRect(0, 0, w, h)
+  ctx.fillStyle = '#ff5a1f'
+  ctx.fillRect(0, h * 0.12, w, 10)
+  ctx.fillStyle = '#e9ebef'
+  ctx.textAlign = 'center'
+  ctx.font = '600 44px "Bricolage Grotesque", system-ui, sans-serif'
+  ctx.fillText('Li-ion', w / 2, h * 0.42)
+  ctx.font = '500 26px "Geist Mono", monospace'
+  ctx.fillStyle = '#a7adba'
+  ctx.fillText('3349 mAh', w / 2, h * 0.55)
+  ctx.fillText('3.87 V', w / 2, h * 0.63)
+}
+
+function useCanvasTexture(draw, width, height) {
+  const tex = useMemo(() => {
+    const c = document.createElement('canvas')
+    c.width = width
+    c.height = height
+    draw(c)
+    const t = new THREE.CanvasTexture(c)
+    t.colorSpace = THREE.SRGBColorSpace
+    t.anisotropy = 8
+    return t
+  }, [draw, width, height])
+  useEffect(() => {
+    // Redraw once the web fonts are ready so the canvas uses them.
+    document.fonts?.ready.then(() => {
+      draw(tex.image)
+      tex.needsUpdate = true
+    })
+  }, [draw, tex])
+  return tex
+}
+
+// Thin rounded-corner plate for the glass layers; RoundedBox can't round corners wider than half its depth.
+function Slab({ w, h, depth, r, children, ...props }) {
+  const geo = useMemo(() => {
+    const s = new THREE.Shape()
+    const x = -w / 2
+    const y = -h / 2
+    s.moveTo(x + r, y)
+    s.lineTo(x + w - r, y)
+    s.quadraticCurveTo(x + w, y, x + w, y + r)
+    s.lineTo(x + w, y + h - r)
+    s.quadraticCurveTo(x + w, y + h, x + w - r, y + h)
+    s.lineTo(x + r, y + h)
+    s.quadraticCurveTo(x, y + h, x, y + h - r)
+    s.lineTo(x, y + r)
+    s.quadraticCurveTo(x, y, x + r, y)
+    const g = new THREE.ExtrudeGeometry(s, { depth, bevelEnabled: false, curveSegments: 12 })
+    g.translate(0, 0, -depth / 2)
+    return g
+  }, [w, h, depth, r])
+  return (
+    <mesh geometry={geo} {...props}>
+      {children}
+    </mesh>
+  )
+}
+
+const ALU = { color: '#c9ccd2', metalness: 1, roughness: 0.32 }
+
 function Phone({ progress }) {
   const outer = useRef()
   const inner = useRef()
-  const screen = useRef()
+  const display = useRef()
+  const board = useRef()
+  const battery = useRef()
+  const chassis = useRef()
+  const back = useRef()
   const { viewport } = useThree()
   const wide = viewport.aspect > 1.05
 
-  const uniforms = useMemo(
-    () => ({ uTime: { value: 0 }, uAspect: { value: (W - 0.07) / (H - 0.07) } }),
-    []
-  )
+  const screenTex = useCanvasTexture(drawScreen, 640, 1324)
+  const batteryTex = useCanvasTexture(drawBattery, 256, 420)
 
   useFrame((state, dt) => {
     const p = progress.get()
     const { pointer } = state
-    screen.current.uniforms.uTime.value = state.clock.elapsedTime
-
-    const swing = smooth(0.12, 0.62, p)
-    const exit = smooth(0.72, 1, p)
-
-    const targetRotY = -0.45 + swing * Math.PI * 2 * 0.5 + exit * Math.PI + pointer.x * 0.35
-    const targetRotX = 0.08 - pointer.y * 0.18 + Math.sin(swing * Math.PI) * 0.22
-    const targetRotZ = (wide ? -0.08 : 0) + swing * 0.12
-
-    const targetX = wide ? THREE.MathUtils.lerp(1.65, -1.75, swing) * Math.min(1, viewport.width / 9) : 0
-    const targetY = wide ? -exit * 0.6 : THREE.MathUtils.lerp(-1.75, 1.15, swing) - exit * 0.4
-    const targetS = (wide ? 1 : 0.62) * (1 - exit * 0.25)
+    const swing = smooth(0.06, 0.42, p)
+    const explode = smooth(0.18, 0.55, p)
+    const exit = smooth(0.82, 1, p)
 
     const r = inner.current.rotation
-    r.y = THREE.MathUtils.damp(r.y, targetRotY, 3.5, dt)
-    r.x = THREE.MathUtils.damp(r.x, targetRotX, 3.5, dt)
-    r.z = THREE.MathUtils.damp(r.z, targetRotZ, 3.5, dt)
+    r.y = THREE.MathUtils.damp(r.y, -0.38 - swing * 0.72 + pointer.x * 0.22, 4, dt)
+    r.x = THREE.MathUtils.damp(r.x, 0.12 + swing * 0.3 - pointer.y * 0.12, 4, dt)
+    r.z = THREE.MathUtils.damp(r.z, swing * 0.12, 4, dt)
+
+    const gap = explode * (wide ? 1 : 0.85)
+    const damp = (ref, z) => (ref.current.position.z = THREE.MathUtils.damp(ref.current.position.z, z, 6, dt))
+    damp(display, D / 2 + 0.012 + gap * 1.5)
+    damp(board, 0.02 + gap * 0.78)
+    damp(battery, -0.02 + gap * 0.1)
+    damp(chassis, -gap * 0.65)
+    damp(back, -D / 2 - 0.012 - gap * 1.4)
 
     const o = outer.current
-    o.position.x = THREE.MathUtils.damp(o.position.x, targetX, 3, dt)
-    o.position.y = THREE.MathUtils.damp(o.position.y, targetY, 3, dt)
-    const s = THREE.MathUtils.damp(o.scale.x, targetS, 3, dt)
-    o.scale.setScalar(s)
+    const tx = wide ? Math.min(2.1, viewport.width * 0.2) - swing * 0.15 : 0
+    const ty = wide ? exit * 0.5 : THREE.MathUtils.lerp(-1.55, 1.3, swing) + exit * 0.3
+    const ts = (wide ? 1 : 0.6) * (1 - swing * (wide ? 0.12 : 0.2))
+    o.position.x = THREE.MathUtils.damp(o.position.x, tx, 3.5, dt)
+    o.position.y = THREE.MathUtils.damp(o.position.y, ty + Math.sin(state.clock.elapsedTime * 0.9) * 0.05, 3.5, dt)
+    o.scale.setScalar(THREE.MathUtils.damp(o.scale.x, ts, 3.5, dt))
   })
 
   return (
-    <group ref={outer} position={[wide ? 1.65 : 0, wide ? 0 : -1.75, 0]} scale={wide ? 1 : 0.62}>
-      <Float speed={1.4} rotationIntensity={0.25} floatIntensity={0.6} floatingRange={[-0.08, 0.08]}>
-        <group ref={inner} rotation={[0.08, -0.45, 0]}>
-          {/* titanium frame */}
-          <RoundedBox args={[W + 0.035, H + 0.035, D - 0.03]} radius={0.21} smoothness={6}>
-            <meshPhysicalMaterial color="#b89466" metalness={1} roughness={0.22} clearcoat={0.6} />
+    <group ref={outer} position={[wide ? 2 : 0, wide ? 0 : -1.55, 0]} scale={wide ? 1 : 0.6}>
+      <group ref={inner} rotation={[0.12, -0.38, 0]}>
+        {/* display assembly */}
+        <group ref={display} position={[0, 0, D / 2 + 0.012]}>
+          <Slab w={W - 0.02} h={H - 0.02} depth={0.022} r={0.19}>
+            <meshPhysicalMaterial color="#0b0d12" roughness={0.1} metalness={0.2} clearcoat={1} />
+          </Slab>
+          <mesh position={[0, 0, 0.0115]}>
+            <planeGeometry args={[W - 0.08, H - 0.08]} />
+            <meshBasicMaterial map={screenTex} transparent toneMapped={false} />
+          </mesh>
+        </group>
+
+        {/* logic board */}
+        <group ref={board} position={[0, 0, 0.02]}>
+          <mesh position={[0, 0.72, 0]}>
+            <boxGeometry args={[W - 0.3, 1.25, 0.03]} />
+            <meshStandardMaterial color="#1f2a44" roughness={0.6} metalness={0.2} />
+          </mesh>
+          {[
+            [-0.25, 0.95, 0.42, 0.42, '#2b2f38'],
+            [0.3, 0.98, 0.3, 0.3, '#b8bcc6'],
+            [0.28, 0.55, 0.36, 0.2, '#2b2f38'],
+            [-0.28, 0.45, 0.3, 0.18, '#b8bcc6'],
+            [0.02, 0.3, 0.6, 0.06, '#d9a441'],
+          ].map(([x, y, w, h, c], i) => (
+            <mesh key={i} position={[x, y, 0.03]}>
+              <boxGeometry args={[w, h, 0.03]} />
+              <meshStandardMaterial color={c} metalness={c === '#2b2f38' ? 0.3 : 0.9} roughness={0.35} />
+            </mesh>
+          ))}
+        </group>
+
+        {/* battery */}
+        <group ref={battery} position={[0, 0, -0.02]}>
+          <RoundedBox args={[W - 0.34, 1.55, 0.05]} radius={0.04} smoothness={3} position={[0, -0.62, 0]}>
+            <meshStandardMaterial color="#20232b" roughness={0.5} />
           </RoundedBox>
-          {/* glass body */}
+          <mesh position={[0, -0.62, 0.026]}>
+            <planeGeometry args={[W - 0.42, 1.48]} />
+            <meshBasicMaterial map={batteryTex} toneMapped={false} />
+          </mesh>
+        </group>
+
+        {/* chassis */}
+        <group ref={chassis}>
           <RoundedBox args={[W, H, D]} radius={0.2} smoothness={6}>
-            <meshPhysicalMaterial color="#3a3026" metalness={0.55} roughness={0.38} clearcoat={1} clearcoatRoughness={0.12} />
+            <meshPhysicalMaterial {...ALU} clearcoat={0.4} />
           </RoundedBox>
-          {/* display */}
-          <mesh position={[0, 0, D / 2 + 0.002]}>
-            <planeGeometry args={[W - 0.07, H - 0.07]} />
-            <shaderMaterial
-              ref={screen}
-              uniforms={uniforms}
-              vertexShader={screenVertex}
-              fragmentShader={screenFragment}
-              transparent
-            />
-          </mesh>
-          {/* side buttons */}
-          <mesh position={[W / 2 + 0.025, 0.55, 0]}>
+          <mesh position={[W / 2 + 0.012, 0.55, 0]}>
             <boxGeometry args={[0.02, 0.42, 0.05]} />
-            <meshStandardMaterial color="#b89466" metalness={1} roughness={0.25} />
+            <meshStandardMaterial {...ALU} />
           </mesh>
-          <mesh position={[-W / 2 - 0.025, 0.85, 0]}>
+          <mesh position={[-W / 2 - 0.012, 0.85, 0]}>
             <boxGeometry args={[0.02, 0.2, 0.05]} />
-            <meshStandardMaterial color="#b89466" metalness={1} roughness={0.25} />
+            <meshStandardMaterial {...ALU} />
           </mesh>
-          <mesh position={[-W / 2 - 0.025, 0.5, 0]}>
+          <mesh position={[-W / 2 - 0.012, 0.5, 0]}>
             <boxGeometry args={[0.02, 0.2, 0.05]} />
-            <meshStandardMaterial color="#b89466" metalness={1} roughness={0.25} />
+            <meshStandardMaterial {...ALU} />
           </mesh>
-          {/* camera plateau */}
-          <RoundedBox args={[0.68, 0.68, 0.05]} radius={0.12} smoothness={4} position={[-0.33, 1.08, -D / 2 - 0.012]}>
-            <meshPhysicalMaterial color="#221c16" metalness={0.5} roughness={0.2} clearcoat={1} />
+        </group>
+
+        {/* back glass + cameras */}
+        <group ref={back} position={[0, 0, -D / 2 - 0.012]}>
+          <Slab w={W - 0.02} h={H - 0.02} depth={0.022} r={0.19}>
+            <meshPhysicalMaterial color="#d9d5ce" roughness={0.55} metalness={0.1} clearcoat={0.3} />
+          </Slab>
+          <RoundedBox args={[0.66, 0.66, 0.05]} radius={0.12} smoothness={4} position={[-0.34, 1.08, -0.03]}>
+            <meshPhysicalMaterial color="#cfcac2" roughness={0.3} metalness={0.2} clearcoat={1} />
           </RoundedBox>
           {[
-            [-0.47, 1.22],
-            [-0.47, 0.94],
-            [-0.19, 1.08],
+            [-0.48, 1.22],
+            [-0.48, 0.94],
+            [-0.2, 1.08],
           ].map(([x, y], i) => (
-            <group key={i} position={[x, y, -D / 2 - 0.05]} rotation={[Math.PI / 2, 0, 0]}>
+            <group key={i} position={[x, y, -0.07]} rotation={[Math.PI / 2, 0, 0]}>
               <mesh>
-                <cylinderGeometry args={[0.105, 0.105, 0.05, 40]} />
-                <meshStandardMaterial color="#b89466" metalness={1} roughness={0.2} />
+                <cylinderGeometry args={[0.1, 0.1, 0.04, 40]} />
+                <meshStandardMaterial {...ALU} />
               </mesh>
-              <mesh position={[0, -0.026, 0]}>
-                <cylinderGeometry args={[0.08, 0.08, 0.01, 40]} />
-                <meshPhysicalMaterial color="#05070a" metalness={0.2} roughness={0.05} clearcoat={1} />
+              <mesh position={[0, -0.021, 0]}>
+                <cylinderGeometry args={[0.075, 0.075, 0.01, 40]} />
+                <meshPhysicalMaterial color="#05070a" roughness={0.05} clearcoat={1} />
               </mesh>
             </group>
           ))}
-          {/* engraved mark on the back */}
-          <mesh position={[0, -0.1, -D / 2 - 0.001]} rotation={[0, Math.PI, 0]}>
-            <ringGeometry args={[0.16, 0.175, 64]} />
-            <meshStandardMaterial color="#c9a96e" metalness={1} roughness={0.3} />
-          </mesh>
         </group>
-      </Float>
-    </group>
-  )
-}
-
-function Rings({ progress }) {
-  const a = useRef()
-  const b = useRef()
-  useFrame((state, dt) => {
-    const p = progress.get()
-    const t = state.clock.elapsedTime
-    a.current.rotation.set(1.15 + p * 0.8, t * 0.05, 0.3 + t * 0.03)
-    b.current.rotation.set(1.5 - p * 0.6, -t * 0.04, -0.5)
-    const s = 1 + p * 0.35
-    a.current.scale.setScalar(s)
-    b.current.scale.setScalar(s * 1.08)
-  })
-  return (
-    <group>
-      <mesh ref={a}>
-        <torusGeometry args={[2.6, 0.006, 8, 220]} />
-        <meshStandardMaterial color="#c9a96e" emissive="#8a6a3a" emissiveIntensity={0.35} transparent opacity={0.75} metalness={1} roughness={0.3} />
-      </mesh>
-      <mesh ref={b}>
-        <torusGeometry args={[3.3, 0.004, 8, 220]} />
-        <meshStandardMaterial color="#e6cfa3" emissive="#6b522c" emissiveIntensity={0.3} metalness={1} roughness={0.3} transparent opacity={0.45} />
-      </mesh>
+      </group>
     </group>
   )
 }
@@ -206,20 +299,19 @@ export default function PhoneScene({ progress, active }) {
       className="hero-canvas"
       dpr={[1, 1.75]}
       frameloop={active ? 'always' : 'never'}
-      camera={{ position: [0, 0, 8.2], fov: 35 }}
+      camera={{ position: [0, 0, 8.6], fov: 35 }}
       gl={{ antialias: true, alpha: true, powerPreference: 'high-performance' }}
     >
-      <ambientLight intensity={0.25} />
-      <spotLight position={[4, 6, 6]} angle={0.4} penumbra={1} intensity={60} color="#ffe2b8" />
-      <pointLight position={[-5, -2, -4]} intensity={25} color="#c9a96e" />
+      <ambientLight intensity={0.7} />
+      <directionalLight position={[3, 5, 6]} intensity={1.6} />
+      <directionalLight position={[-6, 1, -3]} intensity={0.8} color="#ffd9c7" />
       <Phone progress={progress} />
-      <Rings progress={progress} />
-      <Sparkles count={45} scale={[11, 6, 4]} size={1.8} speed={0.25} opacity={0.55} color="#e8c98f" />
+      <ContactShadows position={[0, -2.45, 0]} opacity={0.32} scale={9} blur={2.6} far={4} resolution={512} color="#1b2030" />
       <Environment resolution={256} frames={1}>
-        <Lightformer intensity={2.2} position={[0, 5, -2]} scale={[10, 2, 1]} color="#fff3e0" />
-        <Lightformer intensity={1.6} position={[-5, 1, 1]} rotation-y={Math.PI / 2} scale={[6, 2, 1]} color="#e8c98f" />
-        <Lightformer intensity={1} position={[5, -1, 1]} rotation-y={-Math.PI / 2} scale={[6, 2, 1]} color="#ffffff" />
-        <Lightformer form="ring" intensity={3} position={[2, 2, 5]} scale={1.6} color="#ffd9a0" />
+        <Lightformer intensity={2.5} position={[0, 5, -2]} scale={[10, 2, 1]} />
+        <Lightformer intensity={1.8} position={[-5, 1, 1]} rotation-y={Math.PI / 2} scale={[6, 2, 1]} />
+        <Lightformer intensity={1.2} position={[5, -1, 1]} rotation-y={-Math.PI / 2} scale={[6, 2, 1]} color="#ffe2d4" />
+        <Lightformer form="ring" intensity={2} position={[2, 2, 5]} scale={1.6} />
       </Environment>
     </Canvas>
   )

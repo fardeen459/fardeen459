@@ -14,10 +14,8 @@ export default function Footer() {
         <div className="footer-top">
           <div className="footer-brand">
             <div className="brand">
-              <span className="brand-mark">DM</span>
-              <span className="brand-name">
-                Downtown <em>Mobile</em>
-              </span>
+              <span className="brand-mark" aria-hidden="true">DM</span>
+              <span className="brand-name">Downtown Mobile</span>
             </div>
             <p>Turlock's trusted phone repair experts.</p>
             <p className="muted">Fast, affordable, and reliable.</p>

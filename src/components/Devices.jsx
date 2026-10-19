@@ -25,7 +25,7 @@ export default function Devices() {
 
         <div className="devices-grid">
           <Reveal className="devices-list" role="tablist" aria-label="Device categories">
-            {DEVICES.map((d, i) => {
+            {DEVICES.map((d) => {
               const I = Icon[d.id]
               const on = d.id === active
               return (
@@ -38,7 +38,6 @@ export default function Devices() {
                   onMouseEnter={() => window.matchMedia('(hover: hover)').matches && setActive(d.id)}
                 >
                   {on && <motion.span layoutId="device-pill" className="device-pill" transition={{ duration: 0.6, ease }} />}
-                  <span className="device-index">0{i + 1}</span>
                   <I className="device-tab-icon" />
                   <span className="device-tab-text">
                     <strong>{d.name}</strong>
