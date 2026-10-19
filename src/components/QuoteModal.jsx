@@ -7,10 +7,12 @@ import { Icon, ease } from './ui'
 export default function QuoteModal({ state, onClose }) {
   const first = useRef(null)
   const [form, setForm] = useState({})
+  const [sent, setSent] = useState(false)
 
   useEffect(() => {
     if (!state) return
     setForm({ device: state.device || DEVICES[0].name })
+    setSent(false)
     const t = setTimeout(() => first.current?.focus(), 350)
     const onKey = (e) => e.key === 'Escape' && onClose()
     window.addEventListener('keydown', onKey)
@@ -37,6 +39,7 @@ export default function QuoteModal({ state, onClose }) {
       '',
       `Issue: ${form.issue || ''}`,
     ].filter((l) => l !== null)
+    setSent(true)
     window.location.href = `mailto:${BUSINESS.email}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(lines.join('\n'))}`
   }
 
@@ -69,6 +72,14 @@ export default function QuoteModal({ state, onClose }) {
             <p className="modal-note">
               Walk-ins are always welcome. Prefer to talk? <a href={BUSINESS.phoneHref}>Call {BUSINESS.phone}</a>
             </p>
+            {sent ? (
+              <div className="form-done">
+                <p>Your email app should open with your request filled in. If it didn't, call or text us at <strong>{BUSINESS.phone}</strong> or email <strong>{BUSINESS.email}</strong>.</p>
+                <button type="button" className="link-underline" onClick={() => setSent(false)}>
+                  Back to the form
+                </button>
+              </div>
+            ) : (
             <form onSubmit={submit} className="form">
               <label>
                 <span>Name</span>
@@ -114,6 +125,7 @@ export default function QuoteModal({ state, onClose }) {
               </button>
               <p className="form-fine span-2">Opens your email app with the details filled in. Mon–Fri 10–6 · Sat 10–4 · Sun closed.</p>
             </form>
+            )}
           </motion.div>
         </motion.div>
       )}

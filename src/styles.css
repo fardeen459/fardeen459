@@ -15,6 +15,7 @@
   --ease: cubic-bezier(0.22, 1, 0.36, 1);
   --gutter: clamp(16px, 4vw, 56px);
   --section: clamp(110px, 16vw, 220px);
+  color-scheme: dark;
 }
 
 *,
@@ -1754,4 +1755,48 @@ em {
 }
 .g-img.img-soft {
   filter: blur(2.5px) saturate(1.1);
+}
+
+.map-fallback {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  text-align: center;
+  padding: 24px;
+  background: radial-gradient(50% 50% at 50% 45%, rgba(201, 169, 110, 0.16), transparent 70%),
+    repeating-linear-gradient(90deg, rgba(255, 255, 255, 0.03) 0 1px, transparent 1px 56px),
+    repeating-linear-gradient(0deg, rgba(255, 255, 255, 0.03) 0 1px, transparent 1px 56px);
+}
+.map-fallback svg {
+  width: 40px;
+  height: 40px;
+  color: var(--gold-2);
+}
+.map-fallback strong {
+  font-family: var(--serif);
+  font-weight: 500;
+  font-size: 1.8rem;
+}
+.map-fallback span {
+  color: var(--ink-2);
+}
+.map-fallback em {
+  margin-top: 10px;
+  font-size: 0.86rem;
+  letter-spacing: 0.08em;
+  border-bottom: 1px solid currentColor;
+}
+.form-done {
+  display: grid;
+  gap: 18px;
+  justify-items: start;
+  color: var(--ink-2);
+}
+.form-done strong {
+  color: var(--ink);
+  font-weight: 500;
 }

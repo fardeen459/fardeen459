@@ -99,8 +99,8 @@ export const FAQ = [
 ]
 
 export const GALLERY = [
-  { src: '/images/before-after.jpg', alt: 'Before and after phone screen repair — Downtown Mobile Turlock', label: 'Before & After', caption: 'Shattered to flawless' },
-  { src: '/images/shop-interior.jpg', alt: 'Downtown Mobile professional repair shop interior', label: 'The Studio', caption: 'Fully-equipped facility' },
-  { src: '/images/technician.jpg', alt: 'Technician performing a precision board-level repair', label: 'Precision', caption: 'Board-level craftsmanship' },
-  { src: '/images/phone-lineup.jpg', alt: 'Variety of iPhone models repaired at Downtown Mobile Turlock CA', label: 'Every Model', caption: 'iPhone, Samsung, Pixel & more' },
+  { src: 'images/before-after.jpg', alt: 'Before and after phone screen repair — Downtown Mobile Turlock', label: 'Before & After', caption: 'Shattered to flawless' },
+  { src: 'images/shop-interior.jpg', alt: 'Downtown Mobile professional repair shop interior', label: 'The Studio', caption: 'Fully-equipped facility' },
+  { src: 'images/technician.jpg', alt: 'Technician performing a precision board-level repair', label: 'Precision', caption: 'Board-level craftsmanship' },
+  { src: 'images/phone-lineup.jpg', alt: 'Variety of iPhone models repaired at Downtown Mobile Turlock CA', label: 'Every Model', caption: 'iPhone, Samsung, Pixel & more' },
 ]

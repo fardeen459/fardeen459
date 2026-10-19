@@ -28,7 +28,7 @@ export default function Showcase() {
     <section ref={ref} className="showcase" id="studio">
       <div className="showcase-sticky">
         <motion.div className="showcase-media" style={{ clipPath: clip }}>
-          <SmartImg className="showcase-img" src="/images/shop-interior.jpg" alt="Downtown Mobile professional repair shop interior" style={{ scale: imgScale }} />
+          <SmartImg className="showcase-img" src="images/shop-interior.jpg" alt="Downtown Mobile professional repair shop interior" style={{ scale: imgScale }} />
           <motion.div className="showcase-shade" style={{ opacity: shade }} />
         </motion.div>
 

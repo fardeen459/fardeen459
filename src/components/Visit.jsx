@@ -39,10 +39,21 @@ export default function Visit() {
           </Reveal>
         </div>
         <Reveal className="map-frame" delay={0.25}>
-          <iframe title="Map to Downtown Mobile, 520 E Main St, Turlock" src={BUSINESS.mapsEmbed} loading="lazy" referrerPolicy="no-referrer-when-downgrade" />
-          <div className="map-pin">
-            <span />
-          </div>
+          {import.meta.env.MODE === 'artifact' ? (
+            <a className="map-fallback" href={BUSINESS.mapsHref} target="_blank" rel="noreferrer">
+              <Icon.pin />
+              <strong>{BUSINESS.street}</strong>
+              <span>{BUSINESS.city}</span>
+              <em>Open in Google Maps</em>
+            </a>
+          ) : (
+            <>
+              <iframe title="Map to Downtown Mobile, 520 E Main St, Turlock" src={BUSINESS.mapsEmbed} loading="lazy" referrerPolicy="no-referrer-when-downgrade" />
+              <div className="map-pin">
+                <span />
+              </div>
+            </>
+          )}
         </Reveal>
       </div>
     </section>
