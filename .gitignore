@@ -1,3 +1,6 @@
 node_modules
 dist
 .DS_Store
+
+# Trader skill working data (holds personal details like the SEC user agent)
+trader/
