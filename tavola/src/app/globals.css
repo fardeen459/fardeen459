@@ -70,7 +70,8 @@ button {
       --floor 1.3s ease,
       --accent 1.3s ease,
       --tint 1.3s ease;
-    overscroll-behavior-x: contain;
+    /* no overscroll-behavior here: on a clipped box it stops a slightly
+       diagonal trackpad scroll from reaching the page at all */
     -webkit-tap-highlight-color: transparent;
   }
 
