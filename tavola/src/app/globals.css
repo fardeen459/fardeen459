@@ -13,24 +13,6 @@
   --color-ink: #17110e;
 }
 
-/* Registered so the three per-dish colours can be transitioned as colours,
-   gradients included. */
-@property --floor {
-  syntax: "<color>";
-  inherits: true;
-  initial-value: #2a1411;
-}
-@property --accent {
-  syntax: "<color>";
-  inherits: true;
-  initial-value: #f0714f;
-}
-@property --tint {
-  syntax: "<color>";
-  inherits: true;
-  initial-value: #ecdccb;
-}
-
 html {
   color-scheme: dark;
   background: var(--color-ink);
@@ -64,15 +46,23 @@ button {
     min-height: 35rem;
     overflow: hidden;
     isolation: isolate;
-    background-color: var(--floor);
+    background-color: var(--color-ink);
     color: var(--color-cream);
-    transition:
-      --floor 1.3s ease,
-      --accent 1.3s ease,
-      --tint 1.3s ease;
     /* no overscroll-behavior here: on a clipped box it stops a slightly
        diagonal trackpad scroll from reaching the page at all */
     -webkit-tap-highlight-color: transparent;
+  }
+
+  /* Per-dish colours fade only on a few plain-colour layers (.floor, .scrim,
+     .cloth-tint). Fading the variables on .hero itself restyles the whole
+     page every frame and starves the turning animation. */
+  .floor {
+    position: absolute;
+    inset: 0;
+    z-index: -1;
+    background-color: var(--floor);
+    transition: background-color 1.3s ease;
+    will-change: transform;
   }
 
   /* the floor: faint boards and a vignette */
@@ -163,12 +153,20 @@ button {
     inset: 0;
     border-radius: 50%;
     overflow: hidden;
-    /* the tint must blend with the linen and nothing else */
-    isolation: isolate;
-    /* the tint is the background colour, multiplied into the linen in the
-       same element: one layer instead of a blend layer on top */
+  }
+  /* The dish's tint is a plain colour layer, so fading it repaints nothing.
+     The weave lies over it as black with alpha = 1 - linen, which gives
+     exactly tint x linen (what a multiply blend would) with no blending. */
+  .cloth-tint {
+    position: absolute;
+    inset: 0;
     background-color: var(--tint);
-    background-blend-mode: multiply;
+    transition: background-color 1.3s ease;
+    will-change: transform;
+  }
+  .cloth-weave {
+    position: absolute;
+    inset: 0;
     background-size: 500px 500px;
   }
 
@@ -189,15 +187,37 @@ button {
   .cloth-lettering {
     position: absolute;
     inset: 0;
+    transition: opacity 0.6s ease;
+    /* its own layer from the start, so fading it out never repaints the cloth */
+    will-change: opacity;
+  }
+  .cloth-lettering svg {
+    display: block;
     width: 100%;
     height: 100%;
-    transition: opacity 0.6s ease;
   }
+  /* a zero-size box at the centre of the cloth; each letter stands on the
+     ring with its foot on the circle, turned about the centre */
   .ring-text {
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    width: 0;
+    height: 0;
     font-family: var(--font-serif);
     font-size: 27px;
     font-weight: 560;
-    fill: rgb(72 50 40 / 0.5);
+    line-height: 1;
+    color: rgb(72 50 40 / 0.5);
+  }
+  .ring-text span {
+    position: absolute;
+    left: -1em;
+    bottom: 0;
+    width: 2em;
+    text-align: center;
+    white-space: pre;
+    transform-origin: 50% 100%;
   }
   .stitch {
     fill: none;
@@ -214,20 +234,25 @@ button {
     stroke-linecap: round;
   }
 
+  /* All loose ingredients fade as one group. Their shadows sit together in
+     one layer that is shifted each frame so the light stays put; the
+     ingredients themselves never move against the cloth. */
   .loose {
     position: absolute;
+    inset: 0;
     pointer-events: none;
     transition: opacity 0.6s ease;
+    will-change: opacity;
+  }
+  .loose-shadows {
+    position: absolute;
+    inset: 0;
+    opacity: 0.55;
+    will-change: transform;
   }
   .loose img {
     position: absolute;
-    inset: 0;
-    width: 100%;
-    height: 100%;
-    will-change: transform;
-  }
-  .loose-shadow {
-    opacity: 0.55;
+    max-width: none;
   }
 
   /* fixed light from the upper left: counter-rotated every frame. Drawn
@@ -257,8 +282,18 @@ button {
     transition: opacity 0.7s ease;
   }
 
-  /* its own element so it can be turned against the table: the light then
-     always comes from the same side of the screen */
+  /* Shadows are round, so they never need turning: they sit on the ring with
+     their plates, and the whole set is shifted each frame so the light always
+     comes from the same side of the screen. */
+  .plate-shadows {
+    position: absolute;
+    left: 1000px;
+    top: 1000px;
+    width: 0;
+    height: 0;
+    pointer-events: none;
+    will-change: transform;
+  }
   .plate-shadow {
     position: absolute;
     left: -230px;
@@ -268,6 +303,7 @@ button {
     border-radius: 50%;
     will-change: transform;
     pointer-events: none;
+    transition: opacity 0.7s ease;
     background: radial-gradient(
       closest-side,
       rgb(34 18 10 / 0.6) 64%,
@@ -300,7 +336,6 @@ button {
     display: block;
     width: 100%;
     height: 100%;
-    will-change: transform;
     pointer-events: none;
     -webkit-user-drag: none;
   }
@@ -363,7 +398,7 @@ button {
   }
 
   /* ---- an open dish clears the table ---------------------------- */
-  .hero[data-open="true"] .plate:not([data-front="true"]) {
+  .hero[data-open="true"] :is(.plate, .plate-shadow):not([data-front="true"]) {
     opacity: 0.05;
   }
   .hero[data-open="true"] :is(.cloth-lettering, .loose) {
@@ -373,28 +408,30 @@ button {
   /* ================================================================
      Scrim: keeps the copy on dark floor whatever the table does
      ================================================================ */
+  /* A plain floor-coloured layer shaped by a fixed mask: the colour can fade
+     without repainting a full-screen gradient on every frame. */
   .scrim {
+    --scrim-shape: linear-gradient(
+      to top,
+      #000 0%,
+      #000 24%,
+      rgb(0 0 0 / 0.95) 36%,
+      rgb(0 0 0 / 0.62) 46%,
+      transparent 60%
+    );
     position: absolute;
     inset: 0;
     z-index: 2;
     pointer-events: none;
-    background: linear-gradient(
-      to top,
-      var(--floor) 0%,
-      var(--floor) 24%,
-      color-mix(in srgb, var(--floor) 95%, transparent) 36%,
-      color-mix(in srgb, var(--floor) 62%, transparent) 46%,
-      color-mix(in srgb, var(--floor) 0%, transparent) 60%
-    );
+    background-color: var(--floor);
+    transition: background-color 1.3s ease;
+    -webkit-mask-image: var(--scrim-shape);
+    mask-image: var(--scrim-shape);
+    will-change: transform;
   }
   @variant wide {
     .scrim {
-      background: linear-gradient(
-        to right,
-        var(--floor) 0%,
-        color-mix(in srgb, var(--floor) 90%, transparent) 21%,
-        color-mix(in srgb, var(--floor) 0%, transparent) 46%
-      );
+      --scrim-shape: linear-gradient(to right, #000 0%, rgb(0 0 0 / 0.9) 21%, transparent 46%);
     }
   }
 
@@ -410,6 +447,11 @@ button {
     justify-content: space-between;
     padding: clamp(1rem, 2.8svh, 1.9rem) var(--gutter);
     pointer-events: none;
+    transition: opacity 0.8s ease;
+  }
+  /* held back until the fonts and plates are ready, so nothing swaps in */
+  .hero[data-phase="loading"] .hero-nav {
+    opacity: 0;
   }
   .hero-nav > * {
     pointer-events: auto;
@@ -432,11 +474,12 @@ button {
     height: 1.25rem;
     padding: 0 0.3rem;
     border-radius: 999px;
-    background: var(--accent);
+    background-color: var(--accent);
     color: #1a120e;
     font-size: 0.62rem;
     font-weight: 700;
     letter-spacing: 0;
+    transition: background-color 0.6s ease;
     animation: bump 0.5s cubic-bezier(0.3, 1.6, 0.5, 1) backwards;
   }
   @keyframes bump {
@@ -452,7 +495,8 @@ button {
     padding: 1.15rem 1.25rem 1.2rem;
     border-radius: 1rem;
     border: 1px solid var(--line);
-    background: color-mix(in srgb, var(--floor) 80%, #f5ede1);
+    background-color: color-mix(in srgb, var(--floor) 80%, #f5ede1);
+    transition: background-color 1.3s ease;
     box-shadow: 0 1.4rem 3.2rem rgb(0 0 0 / 0.5);
     animation: fadeUp 0.35s cubic-bezier(0.2, 0.7, 0.2, 1) backwards;
   }
@@ -552,7 +596,8 @@ button {
   .line.accent {
     font-style: italic;
     font-weight: 340;
-    color: var(--accent);
+    /* each name carries its own dish's colour, so the outgoing one keeps it */
+    color: var(--line-accent, var(--accent));
   }
   .is-in .line {
     animation: rise 0.95s cubic-bezier(0.2, 0.75, 0.2, 1) backwards;

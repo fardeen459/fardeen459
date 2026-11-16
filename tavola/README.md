@@ -53,10 +53,30 @@ Two nested boxes do the work (`src/components/Hero.tsx`):
 
 `target` is the dish that should be at the front (fractional while dragging);
 `pos` follows it on a critically damped spring and the rotation comes from
-`pos`. Each plate has its own shadow element that is turned back by the
-plate's total rotation every frame, so the light always comes from the upper
-left of the screen. The cloth is a neutral linen tile with the dish's tint
-laid over it using `mix-blend-mode: multiply`.
+`pos`. The plate shadows sit on the ring with their plates, and the whole set
+is shifted each frame by the screen's light offset turned into table space, so
+the light always comes from the upper left of the screen.
+
+The cloth is the dish's tint as a plain colour layer with the linen weave on
+top, stored as black with alpha = 1 − linen. That gives exactly tint × linen
+(what a multiply blend would) without a blend mode.
+
+### Keeping it smooth on phones
+
+The rotation is driven from JavaScript, so anything that keeps the main thread
+busy shows up as a stutter. A few rules keep it light:
+
+- Per-dish colours fade on a handful of plain-colour layers (`.floor`,
+  `.scrim`, `.cloth-tint`), never as variables the whole page inherits:
+  animating those restyled every element on every frame.
+- An idle table writes nothing; a turning one writes about eight transforms a
+  frame (shadow sets, not individual shadows; only plates near the front).
+- The lettering round the cloth is HTML, one letter per span. SVG text is
+  re-laid out whenever its on-screen scale changes, so every camera zoom paid
+  for it.
+- The opening waits until the plates, the cloth, the loose ingredients and the
+  fonts are decoded, so nothing pops in, and every ingredient image is warmed
+  so opening a dish never waits on one.
 
 `prefers-reduced-motion` skips the opening, the auto-turn and the easing.
 

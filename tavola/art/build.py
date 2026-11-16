@@ -38,9 +38,11 @@ def grade(img: np.ndarray, exposure: float = 1.0, sat: float = 1.1, contrast: fl
     return np.dstack([rgb, a]).astype(np.float32)
 
 
-def save(arr: np.ndarray, path: str, quality: int = 90):
+def save(arr: np.ndarray, path: str, quality: int = 90, size: int = 0):
     os.makedirs(os.path.dirname(path), exist_ok=True)
     im = Image.fromarray((np.clip(arr, 0, 1) * 255 + 0.5).astype(np.uint8), "RGBA")
+    if size:
+        im = im.resize((size, size), Image.LANCZOS)
     if path.endswith(".webp"):
         im.save(path, "WEBP", quality=quality, method=6, alpha_quality=96, exact=False)
     else:
@@ -86,10 +88,16 @@ def main():
         if kind == "linen":
             import linen
             arr = linen.make(args.res or 1024)
-            out = os.path.join(args.out or PUBLIC, "linen" + (".png" if args.png else ".jpg"))
+            # The site draws the dish's tint as a plain colour and lays the weave
+            # over it as black with alpha = 1 - linen, which equals tint x linen
+            # (a multiply) without a blend mode. That keeps the tint cheap to fade.
+            luma = np.clip(arr, 0, 1) @ np.array([0.2126, 0.7152, 0.0722], np.float32)
+            rgba = np.zeros(luma.shape + (4,), np.uint8)
+            rgba[..., 3] = np.round((1 - luma) * 255).astype(np.uint8)
+            out = os.path.join(args.out or PUBLIC, "linen-weave" + (".png" if args.png else ".webp"))
             os.makedirs(os.path.dirname(out), exist_ok=True)
-            im = Image.fromarray((np.clip(arr, 0, 1) * 255 + 0.5).astype(np.uint8), "RGB")
-            im.save(out, quality=90) if out.endswith(".jpg") else im.save(out)
+            im = Image.fromarray(rgba, "RGBA")
+            im.save(out, "WEBP", quality=80, alpha_quality=70, method=6) if out.endswith(".webp") else im.save(out)
             print("wrote", out, f"{time.time() - t0:.1f}s", flush=True)
             continue
         if kind == "dish":
@@ -111,7 +119,8 @@ def main():
         base = os.path.join(args.out or os.path.join(PUBLIC, sub), name)
         print("wrote", save(arr, base + ext), f"{time.time() - t0:.1f}s", flush=True)
         if kind == "ing":
-            save(shadow_of(arr), base + "-shadow" + ext, quality=80)
+            # a blurred silhouette: small is plenty, and cheap to decode
+            save(shadow_of(arr), base + "-shadow" + ext, quality=80, size=160)
 
 
 if __name__ == "__main__":

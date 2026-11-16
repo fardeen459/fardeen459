@@ -11,8 +11,18 @@ import {
   type CSSProperties,
   type MouseEvent as ReactMouseEvent,
   type PointerEvent as ReactPointerEvent,
+  type RefObject,
 } from "react";
-import { asset, brand, burstSpots, dishes, ingredients, loose, nav, TABLE } from "@/config";
+import {
+  asset,
+  brand,
+  burstSpots,
+  dishes,
+  ingredients,
+  loose,
+  nav,
+  TABLE,
+} from "@/config";
 
 /* ------------------------------------------------------------------ */
 /* Geometry                                                            */
@@ -37,15 +47,17 @@ const INTRO_GLIDE = 2.5;
 const OMEGA = 6.2;
 /** shadow offsets on screen, in table units: the light sits upper left */
 const PLATE_SHADOW = { x: 34, y: 48, scale: 1.25 };
-const LOOSE_SHADOW = { x: 8, y: 11 };
+const LOOSE_SHADOW = { x: 10, y: 14 };
 
 type Cam = { x: number; y: number; s: number };
 type ViewName = "overview" | "browse" | "detail";
 type Layout = { wide: boolean; front: number } & Record<ViewName, Cam>;
 
-const clamp = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, v));
+const clamp = (v: number, lo: number, hi: number) =>
+  Math.min(hi, Math.max(lo, v));
 const mod = (v: number, n: number) => ((v % n) + n) % n;
-const easeInOut = (t: number) => (t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2);
+const easeInOut = (t: number) =>
+  t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
 const easeOut = (t: number) => 1 - Math.pow(1 - t, 3);
 const smooth = (t: number) => t * t * (3 - 2 * t);
 const pad = (n: number) => String(n).padStart(2, "0");
@@ -74,9 +86,21 @@ function computeLayout(W: number, H: number, wide: boolean): Layout {
     return {
       wide,
       front,
-      overview: { x: W * 0.5, y: H * 0.5 + 30, s: Math.min(W * 0.9, (H - 92) * 0.97) / SIZE },
-      browse: { x: W * 0.62 - ux * RING * sB, y: H * 0.53 - uy * RING * sB, s: sB },
-      detail: { x: W * 0.655 - ux * RING * sD, y: H * 0.515 - uy * RING * sD, s: sD },
+      overview: {
+        x: W * 0.5,
+        y: H * 0.5 + 30,
+        s: Math.min(W * 0.9, (H - 92) * 0.97) / SIZE,
+      },
+      browse: {
+        x: W * 0.62 - ux * RING * sB,
+        y: H * 0.53 - uy * RING * sB,
+        s: sB,
+      },
+      detail: {
+        x: W * 0.655 - ux * RING * sD,
+        y: H * 0.515 - uy * RING * sD,
+        s: sD,
+      },
     };
   }
   // Phone: the plate sits near the top, the table hangs below the middle of
@@ -182,8 +206,21 @@ function createEngine(): Engine {
 
 function Arrow({ flip = false }: { flip?: boolean }) {
   return (
-    <svg width="14" height="10" viewBox="0 0 14 10" fill="none" aria-hidden style={flip ? { transform: "scaleX(-1)" } : undefined}>
-      <path d="M1 5h11M8.5 1.5 12 5 8.5 8.5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" />
+    <svg
+      width="14"
+      height="10"
+      viewBox="0 0 14 10"
+      fill="none"
+      aria-hidden
+      style={flip ? { transform: "scaleX(-1)" } : undefined}
+    >
+      <path
+        d="M1 5h11M8.5 1.5 12 5 8.5 8.5"
+        stroke="currentColor"
+        strokeWidth="1.3"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
     </svg>
   );
 }
@@ -194,26 +231,128 @@ const css = (vars: Record<string, string | number>) => vars as CSSProperties;
 /* The hero                                                            */
 /* ------------------------------------------------------------------ */
 
-/** The cloth's lettering and loose ingredients never change, so React leaves them alone. */
-const RING_LENGTH = 2 * Math.PI * 238;
+const LETTERS = [...brand.lettering.toUpperCase()];
+/** radius of the lettering's baseline, in table units */
+const RING_R = 238;
 
+/**
+ * The stitched lettering round the middle of the cloth, one letter per span.
+ *
+ * It used to be SVG text on a path, but Chrome re-lays out SVG text whenever
+ * its on-screen scale changes, so every frame of a camera zoom (the opening,
+ * opening a dish) paid for it. HTML letters are laid out once.
+ *
+ * Like SVG's textLength, the letters are spaced from their real widths so the
+ * line closes exactly on itself; until the font is measured they are spaced
+ * evenly, which is also what the server renders.
+ */
+function RingText() {
+  const ref = useRef<HTMLDivElement>(null);
+  const [angles, setAngles] = useState<number[] | null>(null);
+  useEffect(() => {
+    let live = true;
+    const measure = () => {
+      const el = ref.current;
+      const ctx = document.createElement("canvas").getContext("2d");
+      if (!live || !el || !ctx) return;
+      const style = getComputedStyle(el);
+      ctx.font = `${style.fontWeight} ${style.fontSize} ${style.fontFamily}`;
+      const widths = LETTERS.map((ch) => ctx.measureText(ch).width);
+      const gap = (2 * Math.PI * RING_R - widths.reduce((a, b) => a + b, 0)) / LETTERS.length;
+      let along = 0;
+      setAngles(
+        widths.map((w) => {
+          const mid = along + w / 2;
+          along += w + gap;
+          return (mid / RING_R) * (180 / Math.PI) - 90; // starts at nine o'clock, runs clockwise
+        }),
+      );
+    };
+    const font = document.fonts?.load('560 27px "Fraunces"');
+    (font ?? Promise.resolve()).then(measure, measure);
+    return () => {
+      live = false;
+    };
+  }, []);
+  return (
+    <div ref={ref} className="ring-text">
+      {LETTERS.map((ch, i) => (
+        <span
+          key={i}
+          style={{
+            // turn about the centre, then stand on the ring (the baseline sits a fifth of an em above the foot)
+            transform: `rotate(${(angles ? angles[i] : ((i + 0.5) / LETTERS.length) * 360 - 90).toFixed(3)}deg) translateY(calc(${-RING_R}px + 0.2em))`,
+          }}
+        >
+          {ch}
+        </span>
+      ))}
+    </div>
+  );
+}
+
+/** The cloth's lettering never changes, so React leaves it alone. */
 const ClothScene = memo(function ClothScene() {
   return (
-    <>
-      <svg className="cloth-lettering" viewBox={`0 0 ${SIZE} ${SIZE}`} aria-hidden>
-                  <defs>
-                    <path id="tavola-ring" d={`M ${HALF - 238},${HALF} a 238,238 0 1,1 476,0 a 238,238 0 1,1 -476,0`} />
-                  </defs>
-                  <circle className="stitch" cx={HALF} cy={HALF} r={186} />
-                  <circle className="stitch" cx={HALF} cy={HALF} r={296} />
-                  <circle className="hem" cx={HALF} cy={HALF} r={972} />
-                  <text className="ring-text">
-                    <textPath href="#tavola-ring" textLength={RING_LENGTH - 4} lengthAdjust="spacing">
-                      {brand.lettering.toUpperCase()}
-                    </textPath>
-                  </text>
-                </svg>
-    </>
+    <div className="cloth-lettering" aria-hidden>
+      <svg viewBox={`0 0 ${SIZE} ${SIZE}`}>
+        <circle className="stitch" cx={HALF} cy={HALF} r={186} />
+        <circle className="stitch" cx={HALF} cy={HALF} r={296} />
+        <circle className="hem" cx={HALF} cy={HALF} r={972} />
+      </svg>
+      <RingText />
+    </div>
+  );
+});
+
+/**
+ * The loose ingredients never move against the cloth, so they are drawn once.
+ * Only their shadows move: the whole shadow layer is shifted each frame so the
+ * light stays at the upper left of the screen while the table turns.
+ */
+const LooseScene = memo(function LooseScene({
+  shadowsRef,
+}: {
+  shadowsRef: RefObject<HTMLDivElement | null>;
+}) {
+  const placed = loose.map((item, j) => {
+    const g = ingredients[item.key];
+    const a = (item.angle * Math.PI) / 180;
+    const size = g.size * (item.scale ?? 1);
+    const style: CSSProperties = {
+      left: HALF + Math.sin(a) * item.radius - size / 2,
+      top: HALF - Math.cos(a) * item.radius - size / 2,
+      width: size,
+      height: size,
+      transform: `rotate(${item.rotate}deg)`,
+    };
+    return { id: `${item.key}-${j}`, g, style };
+  });
+  return (
+    <div className="loose" aria-hidden>
+      <div ref={shadowsRef} className="loose-shadows">
+        {placed.map((p) => (
+          <img
+            key={p.id}
+            data-wait
+            src={asset(p.g.shadow)}
+            alt=""
+            draggable={false}
+            style={p.style}
+          />
+        ))}
+      </div>
+      {placed.map((p) => (
+        <img
+          key={p.id}
+          data-wait
+          src={asset(p.g.file)}
+          alt=""
+          draggable={false}
+          style={p.style}
+        />
+      ))}
+    </div>
   );
 });
 
@@ -238,7 +377,8 @@ export default function Hero() {
   const burstRef = useRef<HTMLDivElement>(null);
   const plateRefs = useRef<(HTMLDivElement | null)[]>([]);
   const shadowRefs = useRef<(HTMLDivElement | null)[]>([]);
-  const looseRefs = useRef<(HTMLImageElement | null)[]>([]);
+  const plateShadowsRef = useRef<HTMLDivElement>(null);
+  const looseShadowsRef = useRef<HTMLDivElement>(null);
   const detailRef = useRef<HTMLDivElement>(null);
   const orderRef = useRef<HTMLDivElement>(null);
   const openerRef = useRef<HTMLElement | null>(null);
@@ -248,7 +388,10 @@ export default function Hero() {
   const dish = dishes[active];
   const fullName = `${dish.name[0]} ${dish.name[1]}`;
   const count = Object.values(order).reduce((a, b) => a + b, 0);
-  const total = dishes.reduce((sum, d) => sum + (order[d.id] ?? 0) * d.price, 0);
+  const total = dishes.reduce(
+    (sum, d) => sum + (order[d.id] ?? 0) * d.price,
+    0,
+  );
 
   /* ---------------- camera ---------------- */
 
@@ -299,7 +442,8 @@ export default function Hero() {
     const e = engineRef.current!;
     if (!e.ready) return;
     e.target = Math.round(e.target);
-    openerRef.current = opener ?? (document.activeElement as HTMLElement | null);
+    openerRef.current =
+      opener ?? (document.activeElement as HTMLElement | null);
     setPortions(1);
     setAdded(false);
     setOrderOpen(false);
@@ -335,7 +479,10 @@ export default function Hero() {
     wideQuery.addEventListener("change", measure);
     motionQuery.addEventListener("change", onMotion);
 
-    const seen = new IntersectionObserver(([entry]) => (e.onScreen = entry.isIntersecting), { threshold: 0.1 });
+    const seen = new IntersectionObserver(
+      ([entry]) => (e.onScreen = entry.isIntersecting),
+      { threshold: 0.1 },
+    );
     seen.observe(hero);
 
     // last value written to each element, so an idle table writes nothing
@@ -361,7 +508,11 @@ export default function Hero() {
       // --- the opening: glide from the overview while the table spins to rest
       if (e.intro >= 0) {
         e.intro = Math.min(1, e.intro + dt / (INTRO_HOLD + INTRO_GLIDE));
-        const glide = clamp((e.intro * (INTRO_HOLD + INTRO_GLIDE) - INTRO_HOLD) / INTRO_GLIDE, 0, 1);
+        const glide = clamp(
+          (e.intro * (INTRO_HOLD + INTRO_GLIDE) - INTRO_HOLD) / INTRO_GLIDE,
+          0,
+          1,
+        );
         const k = easeInOut(glide);
         const a = e.from;
         const b = e.to;
@@ -392,7 +543,14 @@ export default function Hero() {
       }
 
       // --- left alone, step on
-      if (e.ready && !e.open && !e.drag && !e.hold && !e.reduced && now - e.lastTouch > AUTO_MS) {
+      if (
+        e.ready &&
+        !e.open &&
+        !e.drag &&
+        !e.hold &&
+        !e.reduced &&
+        now - e.lastTouch > AUTO_MS
+      ) {
         e.target = Math.round(e.target) + 1;
         e.lastTouch = now;
         e.byUser = false;
@@ -431,45 +589,75 @@ export default function Hero() {
         setActive(front);
         if (e.byUser) {
           const d = dishes[front];
-          setSay(`${d.name[0]} ${d.name[1]}, ${d.price} euros. Dish ${front + 1} of ${N}.`);
+          setSay(
+            `${d.name[0]} ${d.name[1]}, ${d.price} euros. Dish ${front + 1} of ${N}.`,
+          );
         }
       }
 
       // --- write the transforms
       const { front: frontAngle } = e.layout;
       const rot = frontAngle - e.pos * STEP + e.spin;
-      put("world", worldRef.current, `translate3d(${e.cam.x.toFixed(2)}px, ${e.cam.y.toFixed(2)}px, 0) scale(${e.cam.s.toFixed(5)})`);
+      put(
+        "world",
+        worldRef.current,
+        `translate3d(${e.cam.x.toFixed(2)}px, ${e.cam.y.toFixed(2)}px, 0) scale(${e.cam.s.toFixed(5)})`,
+      );
       put("table", tableRef.current, `rotate(${rot.toFixed(3)}deg)`);
-      put("light", lightRef.current, `rotate(${(-rot).toFixed(3)}deg) scale(${SIZE / 250})`);
+      put(
+        "light",
+        lightRef.current,
+        `rotate(${(-rot).toFixed(3)}deg) scale(${SIZE / 250})`,
+      );
 
+      // The light sits at the upper left of the screen. A screen offset turned
+      // back into table space shifts each shadow layer as a whole, so a turn
+      // costs two writes here instead of one per shadow.
+      const r = (rot * Math.PI) / 180;
+      const cos = Math.cos(r);
+      const sin = Math.sin(r);
+      const psx = PLATE_SHADOW.x * cos + PLATE_SHADOW.y * sin;
+      const psy = -PLATE_SHADOW.x * sin + PLATE_SHADOW.y * cos;
+      put(
+        "plate-shadows",
+        plateShadowsRef.current,
+        `translate(${psx.toFixed(2)}px, ${psy.toFixed(2)}px)`,
+      );
+      const lsx = LOOSE_SHADOW.x * cos + LOOSE_SHADOW.y * sin;
+      const lsy = -LOOSE_SHADOW.x * sin + LOOSE_SHADOW.y * cos;
+      put(
+        "loose-shadows",
+        looseShadowsRef.current,
+        `translate(${lsx.toFixed(2)}px, ${lsy.toFixed(2)}px)`,
+      );
+
+      // Only the plates near the front change size, so only they are written.
       for (let i = 0; i < N; i++) {
         const away = Math.abs(wrap(i - e.pos));
         const grow = 1 + BOOST * smooth(clamp(1 - away, 0, 1));
+        const lift = grow - 1;
         const at = i * STEP;
         // each plate carries a fixed turn of its own, so it is upright at the front
-        put(`p${i}`, plateRefs.current[i], `rotate(${at}deg) translateY(${-RING}px) rotate(${-frontAngle}deg) scale(${grow.toFixed(4)})`);
-        // ...and its shadow is turned back by the plate's total rotation
-        const turned = rot + at - frontAngle;
+        put(
+          `p${i}`,
+          plateRefs.current[i],
+          `rotate(${at}deg) translateY(${-RING}px) rotate(${-frontAngle}deg) scale(${grow.toFixed(4)})`,
+        );
+        // a raised plate grows its shadow and throws it a little further
         put(
           `s${i}`,
           shadowRefs.current[i],
-          `rotate(${(-turned).toFixed(3)}deg) translate(${PLATE_SHADOW.x}px, ${PLATE_SHADOW.y}px) scale(${PLATE_SHADOW.scale})`,
+          `translate(${(psx * lift).toFixed(2)}px, ${(psy * lift).toFixed(2)}px) rotate(${at}deg) translateY(${-RING}px) scale(${(grow * PLATE_SHADOW.scale).toFixed(4)})`,
         );
-      }
-
-      for (let j = 0; j < loose.length; j++) {
-        const t = ((rot + loose[j].rotate) * Math.PI) / 180;
-        const c = Math.cos(t);
-        const s = Math.sin(t);
-        const k = 1 / (loose[j].scale ?? 1);
-        const ox = (LOOSE_SHADOW.x * c + LOOSE_SHADOW.y * s) * k;
-        const oy = (-LOOSE_SHADOW.x * s + LOOSE_SHADOW.y * c) * k;
-        put(`l${j}`, looseRefs.current[j], `translate(${ox.toFixed(2)}px, ${oy.toFixed(2)}px)`);
       }
 
       // the fly-out ingredients sit under the front plate, square to the screen
       const at = front * STEP;
-      put("burst", burstRef.current, `rotate(${at}deg) translateY(${-RING}px) rotate(${(-(rot + at)).toFixed(3)}deg)`);
+      put(
+        "burst",
+        burstRef.current,
+        `rotate(${at}deg) translateY(${-RING}px) rotate(${(-(rot + at)).toFixed(3)}deg)`,
+      );
     };
 
     raf = requestAnimationFrame(frame);
@@ -505,11 +693,38 @@ export default function Hero() {
       e.intro = 0;
       setPhase("intro");
     };
-    // decode(), not just load: the plates must be ready to paint before the
-    // camera starts to move, or they pop in one by one during the opening
-    const plates = Array.from(heroRef.current!.querySelectorAll<HTMLImageElement>("img[data-plate]"));
-    Promise.all(plates.map((img) => img.decode().catch(() => undefined))).then(start);
-    const giveUp = window.setTimeout(start, 4000);
+    // decode(), not just load: everything on the table must be ready to paint
+    // before the camera moves, or pieces pop in one by one during the opening.
+    // The fonts too, so no text swaps its face in front of you.
+    const pictures = Array.from(
+      heroRef.current!.querySelectorAll<HTMLImageElement>("img[data-wait]"),
+    );
+    const weave = new Image();
+    weave.src = asset("/img/linen-weave.webp");
+    pictures.push(weave);
+    const fonts = Promise.all(
+      [
+        '360 1em "Fraunces"',
+        'italic 340 1em "Fraunces"',
+        '500 1em "DM Sans"',
+      ].map((face) =>
+        document.fonts ? document.fonts.load(face).catch(() => []) : [],
+      ),
+    );
+    Promise.all([
+      Promise.all(pictures.map((img) => img.decode().catch(() => undefined))),
+      fonts,
+    ]).then(start);
+    const giveUp = window.setTimeout(start, 5000);
+    // A dish's fly-out ingredients include some that are not on the cloth:
+    // fetch and decode them all now, so opening a dish never waits on one.
+    for (const g of Object.values(ingredients)) {
+      for (const src of [g.file, g.shadow]) {
+        const img = new Image();
+        img.src = asset(src);
+        img.decode().catch(() => undefined);
+      }
+    }
     return () => {
       cancelled = true;
       window.clearTimeout(giveUp);
@@ -527,12 +742,19 @@ export default function Hero() {
     moveCamera(open ? "detail" : "browse", open ? 1.05 : 0.9);
     if (open) {
       // the detail region takes focus once it is on its way in
-      const id = window.setTimeout(() => detailRef.current?.focus({ preventScroll: true }), 60);
+      const id = window.setTimeout(
+        () => detailRef.current?.focus({ preventScroll: true }),
+        60,
+      );
       return () => window.clearTimeout(id);
     }
     const back = openerRef.current;
     openerRef.current = null;
-    if (back && back.isConnected && detailRef.current?.contains(document.activeElement)) {
+    if (
+      back &&
+      back.isConnected &&
+      detailRef.current?.contains(document.activeElement)
+    ) {
       back.focus({ preventScroll: true });
     }
   }, [open, moveCamera]);
@@ -557,9 +779,11 @@ export default function Hero() {
     const onKey = (ev: KeyboardEvent) => {
       if (ev.defaultPrevented || ev.altKey || ev.ctrlKey || ev.metaKey) return;
       const el = ev.target as HTMLElement | null;
-      if (el?.closest("input, textarea, select, [contenteditable='true']")) return;
+      if (el?.closest("input, textarea, select, [contenteditable='true']"))
+        return;
       if (ev.key === "Escape") {
-        if (orderRef.current?.querySelector(".order-panel")) setOrderOpen(false);
+        if (orderRef.current?.querySelector(".order-panel"))
+          setOrderOpen(false);
         else if (e.open) closeDish();
         return;
       }
@@ -690,7 +914,10 @@ export default function Hero() {
     setDragging(false);
   };
 
-  const onPlateClick = (index: number, ev: ReactMouseEvent<HTMLButtonElement>) => {
+  const onPlateClick = (
+    index: number,
+    ev: ReactMouseEvent<HTMLButtonElement>,
+  ) => {
     const e = engineRef.current!;
     ev.stopPropagation();
     if (e.justDragged || !e.ready) return;
@@ -719,7 +946,12 @@ export default function Hero() {
     setSay(`Added ${portions} × ${fullName} to your order.`);
   };
 
-  const theme = css({ "--floor": dish.floor, "--accent": dish.accent, "--tint": dish.tint, "--dir": dir });
+  const theme = css({
+    "--floor": dish.floor,
+    "--accent": dish.accent,
+    "--tint": dish.tint,
+    "--dir": dir,
+  });
 
   return (
     <section
@@ -733,6 +965,7 @@ export default function Hero() {
       aria-roledescription="carousel"
       aria-label="The menu: a round table. Turn it to choose a dish."
     >
+      <div className="floor" aria-hidden />
       <h1 className="sr-only">
         {brand.name}. {brand.tagline}
       </h1>
@@ -742,8 +975,14 @@ export default function Hero() {
 
       {/* ---------- nav ---------- */}
       <header className="hero-nav">
-        <a href="#menu" className="block flex-1 leading-none" aria-label={`${brand.name}, ${brand.tagline}`}>
-          <span className="block font-serif text-[1.12rem] font-medium tracking-[0.34em]">{brand.name}</span>
+        <a
+          href="#menu"
+          className="block flex-1 leading-none"
+          aria-label={`${brand.name}, ${brand.tagline}`}
+        >
+          <span className="block font-serif text-[1.12rem] font-medium tracking-[0.34em]">
+            {brand.name}
+          </span>
           <span className="mt-[0.45rem] block text-[0.54rem] font-medium tracking-[0.3em] text-cream/55 uppercase">
             {brand.tagline}
           </span>
@@ -778,11 +1017,17 @@ export default function Hero() {
             </span>
           </button>
           {orderOpen && (
-            <div id="order-panel" className="order-panel" role="dialog" aria-label="Your order">
+            <div
+              id="order-panel"
+              className="order-panel"
+              role="dialog"
+              aria-label="Your order"
+            >
               <p className="label">Your order</p>
               {count === 0 ? (
                 <p className="mt-3 text-[0.9rem] leading-relaxed text-cream/70">
-                  Nothing yet. Turn the table, open a dish and add it from there.
+                  Nothing yet. Turn the table, open a dish and add it from
+                  there.
                 </p>
               ) : (
                 <>
@@ -790,17 +1035,27 @@ export default function Hero() {
                     {dishes
                       .filter((d) => order[d.id])
                       .map((d) => (
-                        <li key={d.id} className="flex items-baseline justify-between gap-4 py-2.5">
+                        <li
+                          key={d.id}
+                          className="flex items-baseline justify-between gap-4 py-2.5"
+                        >
                           <span>
-                            <span className="text-cream/55 tabular-nums">{order[d.id]} ×</span> {d.name[0]} {d.name[1]}
+                            <span className="text-cream/55 tabular-nums">
+                              {order[d.id]} ×
+                            </span>{" "}
+                            {d.name[0]} {d.name[1]}
                           </span>
-                          <span className="tabular-nums">€{order[d.id] * d.price}</span>
+                          <span className="tabular-nums">
+                            €{order[d.id] * d.price}
+                          </span>
                         </li>
                       ))}
                   </ul>
                   <div className="mt-3 flex items-baseline justify-between">
                     <span className="label">Total</span>
-                    <span className="font-serif text-[1.5rem] leading-none">€{total}</span>
+                    <span className="font-serif text-[1.5rem] leading-none">
+                      €{total}
+                    </span>
                   </div>
                   <button
                     type="button"
@@ -829,38 +1084,31 @@ export default function Hero() {
         <div ref={worldRef} className="world">
           <div className="table-shadow" />
           <div ref={tableRef} className="table">
-            <div className="cloth" style={{ backgroundImage: `url(${asset("/img/linen.jpg")})` }}>
+            <div className="cloth">
+              <div className="cloth-tint" />
+              <div
+                className="cloth-weave"
+                style={{
+                  backgroundImage: `url(${asset("/img/linen-weave.webp")})`,
+                }}
+              />
               <ClothScene />
-                {loose.map((item, j) => {
-                  const g = ingredients[item.key];
-                  const a = (item.angle * Math.PI) / 180;
-                  const size = g.size * (item.scale ?? 1);
-                  return (
-                    <div
-                      key={`${item.key}-${j}`}
-                      className="loose"
-                      style={{
-                        left: HALF + Math.sin(a) * item.radius - size / 2,
-                        top: HALF - Math.cos(a) * item.radius - size / 2,
-                        width: size,
-                        height: size,
-                        transform: `rotate(${item.rotate}deg)`,
-                      }}
-                    >
-                      <img
-                        className="loose-shadow"
-                        ref={(el) => {
-                          looseRefs.current[j] = el;
-                        }}
-                        src={asset(g.shadow)}
-                        alt=""
-                        draggable={false}
-                      />
-                      <img src={asset(g.file)} alt="" draggable={false} />
-                    </div>
-                  );
-                })}
+              <LooseScene shadowsRef={looseShadowsRef} />
               <div ref={lightRef} className="cloth-light" />
+            </div>
+
+            {/* every shadow under every plate */}
+            <div ref={plateShadowsRef} className="plate-shadows" aria-hidden>
+              {dishes.map((d, i) => (
+                <div
+                  key={d.id}
+                  className="plate-shadow"
+                  data-front={i === active}
+                  ref={(el) => {
+                    shadowRefs.current[i] = el;
+                  }}
+                />
+              ))}
             </div>
 
             <div ref={burstRef} className="burst" aria-hidden>
@@ -879,8 +1127,18 @@ export default function Hero() {
                       "--size": `${Math.round(g.size * 1.1)}px`,
                     })}
                   >
-                    <img className="burst-shadow" src={asset(g.shadow)} alt="" draggable={false} />
-                    <img className="burst-img" src={asset(g.file)} alt="" draggable={false} />
+                    <img
+                      className="burst-shadow"
+                      src={asset(g.shadow)}
+                      alt=""
+                      draggable={false}
+                    />
+                    <img
+                      className="burst-img"
+                      src={asset(g.file)}
+                      alt=""
+                      draggable={false}
+                    />
                   </div>
                 );
               })}
@@ -905,12 +1163,6 @@ export default function Hero() {
                     plateRefs.current[i] = el;
                   }}
                 >
-                  <div
-                    className="plate-shadow"
-                    ref={(el) => {
-                      shadowRefs.current[i] = el;
-                    }}
-                  />
                   <button
                     type="button"
                     className="plate-btn"
@@ -918,14 +1170,21 @@ export default function Hero() {
                     aria-label={label}
                     onClick={(ev) => onPlateClick(i, ev)}
                   >
-                    <img data-plate src={asset(d.image)} alt="" width={PLATE} height={PLATE} draggable={false} />
+                    <img
+                      data-wait
+                      src={asset(d.image)}
+                      alt=""
+                      width={PLATE}
+                      height={PLATE}
+                      draggable={false}
+                    />
                   </button>
                 </div>
               );
             })}
           </div>
+          <div className="vignette" />
         </div>
-        <div className="vignette" />
       </div>
 
       <div className="scrim" />
@@ -950,7 +1209,12 @@ export default function Hero() {
 
             <h2 className="title" aria-label={fullName}>
               {prev !== null && prev !== active && (
-                <span key={`out-${prev}`} className="title-layer is-out" aria-hidden>
+                <span
+                  key={`out-${prev}`}
+                  className="title-layer is-out"
+                  style={css({ "--line-accent": dishes[prev].accent })}
+                  aria-hidden
+                >
                   <span className="mask">
                     <span className="line">{dishes[prev].name[0]}</span>
                   </span>
@@ -959,7 +1223,12 @@ export default function Hero() {
                   </span>
                 </span>
               )}
-              <span key={`in-${active}`} className="title-layer is-in" aria-hidden>
+              <span
+                key={`in-${active}`}
+                className="title-layer is-in"
+                style={css({ "--line-accent": dish.accent })}
+                aria-hidden
+              >
                 <span className="mask">
                   <span className="line">{dish.name[0]}</span>
                 </span>
@@ -970,22 +1239,45 @@ export default function Hero() {
             </h2>
 
             <div className="browse" inert={open}>
-              <p key={`line-${active}`} className="lede fade-up mt-4 wide:mt-5" style={css({ "--d": "0.12s" })}>
+              <p
+                key={`line-${active}`}
+                className="lede fade-up mt-4 wide:mt-5"
+                style={css({ "--d": "0.12s" })}
+              >
                 {dish.line}
               </p>
-              <div className="fade-up mt-5 flex items-center gap-4 wide:mt-6" style={css({ "--d": "0.2s" })}>
+              <div
+                className="fade-up mt-5 flex items-center gap-4 wide:mt-6"
+                style={css({ "--d": "0.2s" })}
+              >
                 <span key={`price-${active}`} className="price fade-up">
                   €{dish.price}
                 </span>
-                <button type="button" className="pill" onClick={(ev) => openDish(ev.currentTarget)}>
+                <button
+                  type="button"
+                  className="pill"
+                  onClick={(ev) => openDish(ev.currentTarget)}
+                >
                   View the dish <Arrow />
                 </button>
               </div>
-              <div className="fade-up mt-5 flex items-center gap-2 wide:mt-7" style={css({ "--d": "0.28s" })}>
-                <button type="button" className="round" aria-label="Previous dish" onClick={() => step(-1)}>
+              <div
+                className="fade-up mt-5 flex items-center gap-2 wide:mt-7"
+                style={css({ "--d": "0.28s" })}
+              >
+                <button
+                  type="button"
+                  className="round"
+                  aria-label="Previous dish"
+                  onClick={() => step(-1)}
+                >
                   <Arrow flip />
                 </button>
-                <div className="flex items-center px-1" role="group" aria-label="Choose a dish">
+                <div
+                  className="flex items-center px-1"
+                  role="group"
+                  aria-label="Choose a dish"
+                >
                   {dishes.map((d, i) => (
                     <button
                       key={d.id}
@@ -999,7 +1291,12 @@ export default function Hero() {
                     />
                   ))}
                 </div>
-                <button type="button" className="round" aria-label="Next dish" onClick={() => step(1)}>
+                <button
+                  type="button"
+                  className="round"
+                  aria-label="Next dish"
+                  onClick={() => step(1)}
+                >
                   <Arrow />
                 </button>
               </div>
@@ -1018,11 +1315,19 @@ export default function Hero() {
         inert={!open}
       >
         <div className="detail-grip wide:hidden" aria-hidden />
-        <button type="button" className="back stagger" style={css({ "--n": 0 })} onClick={closeDish}>
+        <button
+          type="button"
+          className="back stagger"
+          style={css({ "--n": 0 })}
+          onClick={closeDish}
+        >
           <Arrow flip /> Back to the table
         </button>
 
-        <p className="sheet-title stagger mt-4 wide:hidden" style={css({ "--n": 1 })}>
+        <p
+          className="sheet-title stagger mt-4 wide:hidden"
+          style={css({ "--n": 1 })}
+        >
           {dish.name[0]} <em>{dish.name[1]}</em>
         </p>
 
@@ -1039,10 +1344,15 @@ export default function Hero() {
           </ul>
         </div>
 
-        <dl className="stagger mt-5 grid grid-cols-2 gap-x-6" style={css({ "--n": 3 })}>
+        <dl
+          className="stagger mt-5 grid grid-cols-2 gap-x-6"
+          style={css({ "--n": 3 })}
+        >
           <div>
             <dt className="label">Allergens</dt>
-            <dd className="mt-1.5 text-[0.9rem] leading-snug">{dish.allergens}</dd>
+            <dd className="mt-1.5 text-[0.9rem] leading-snug">
+              {dish.allergens}
+            </dd>
           </div>
           <div>
             <dt className="label">We pour</dt>
@@ -1052,17 +1362,35 @@ export default function Hero() {
 
         <div className="detail-bar stagger wide:mt-6" style={css({ "--n": 4 })}>
           <div className="stepper" role="group" aria-label="Portions">
-            <button type="button" aria-label="One portion fewer" disabled={portions <= 1} onClick={() => setPortions((p) => Math.max(1, p - 1))}>
+            <button
+              type="button"
+              aria-label="One portion fewer"
+              disabled={portions <= 1}
+              onClick={() => setPortions((p) => Math.max(1, p - 1))}
+            >
               −
             </button>
-            <output aria-live="polite" aria-label={`${portions} ${portions === 1 ? "portion" : "portions"}`}>
+            <output
+              aria-live="polite"
+              aria-label={`${portions} ${portions === 1 ? "portion" : "portions"}`}
+            >
               {portions}
             </output>
-            <button type="button" aria-label="One portion more" disabled={portions >= 9} onClick={() => setPortions((p) => Math.min(9, p + 1))}>
+            <button
+              type="button"
+              aria-label="One portion more"
+              disabled={portions >= 9}
+              onClick={() => setPortions((p) => Math.min(9, p + 1))}
+            >
               +
             </button>
           </div>
-          <button type="button" className="pill min-w-0 flex-1 wide:flex-none" data-done={added} onClick={addToOrder}>
+          <button
+            type="button"
+            className="pill min-w-0 flex-1 wide:flex-none"
+            data-done={added}
+            onClick={addToOrder}
+          >
             {added ? (
               <>Added to your order ✓</>
             ) : (
