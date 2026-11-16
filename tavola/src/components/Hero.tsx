@@ -3,6 +3,7 @@
 /* eslint-disable @next/next/no-img-element -- the plates are bare <img> layers the compositor moves; next/image would wrap them */
 
 import {
+  memo,
   useCallback,
   useEffect,
   useRef,
@@ -192,6 +193,29 @@ const css = (vars: Record<string, string | number>) => vars as CSSProperties;
 /* ------------------------------------------------------------------ */
 /* The hero                                                            */
 /* ------------------------------------------------------------------ */
+
+/** The cloth's lettering and loose ingredients never change, so React leaves them alone. */
+const RING_LENGTH = 2 * Math.PI * 238;
+
+const ClothScene = memo(function ClothScene() {
+  return (
+    <>
+      <svg className="cloth-lettering" viewBox={`0 0 ${SIZE} ${SIZE}`} aria-hidden>
+                  <defs>
+                    <path id="tavola-ring" d={`M ${HALF - 238},${HALF} a 238,238 0 1,1 476,0 a 238,238 0 1,1 -476,0`} />
+                  </defs>
+                  <circle className="stitch" cx={HALF} cy={HALF} r={186} />
+                  <circle className="stitch" cx={HALF} cy={HALF} r={296} />
+                  <circle className="hem" cx={HALF} cy={HALF} r={972} />
+                  <text className="ring-text">
+                    <textPath href="#tavola-ring" textLength={RING_LENGTH - 4} lengthAdjust="spacing">
+                      {brand.lettering.toUpperCase()}
+                    </textPath>
+                  </text>
+                </svg>
+    </>
+  );
+});
 
 export default function Hero() {
   const [active, setActive] = useState(0);
@@ -696,7 +720,6 @@ export default function Hero() {
   };
 
   const theme = css({ "--floor": dish.floor, "--accent": dish.accent, "--tint": dish.tint, "--dir": dir });
-  const ringLength = 2 * Math.PI * 238;
 
   return (
     <section
@@ -807,49 +830,36 @@ export default function Hero() {
           <div className="table-shadow" />
           <div ref={tableRef} className="table">
             <div className="cloth" style={{ backgroundImage: `url(${asset("/img/linen.jpg")})` }}>
-              <div className="cloth-tint" />
-              <svg className="cloth-lettering" viewBox={`0 0 ${SIZE} ${SIZE}`} aria-hidden>
-                <defs>
-                  <path id="tavola-ring" d={`M ${HALF - 238},${HALF} a 238,238 0 1,1 476,0 a 238,238 0 1,1 -476,0`} />
-                </defs>
-                <circle className="stitch" cx={HALF} cy={HALF} r={186} />
-                <circle className="stitch" cx={HALF} cy={HALF} r={296} />
-                <circle className="hem" cx={HALF} cy={HALF} r={972} />
-                <text className="ring-text">
-                  <textPath href="#tavola-ring" textLength={ringLength - 4} lengthAdjust="spacing">
-                    {brand.lettering.toUpperCase()}
-                  </textPath>
-                </text>
-              </svg>
-              {loose.map((item, j) => {
-                const g = ingredients[item.key];
-                const a = (item.angle * Math.PI) / 180;
-                const size = g.size * (item.scale ?? 1);
-                return (
-                  <div
-                    key={`${item.key}-${j}`}
-                    className="loose"
-                    style={{
-                      left: HALF + Math.sin(a) * item.radius - size / 2,
-                      top: HALF - Math.cos(a) * item.radius - size / 2,
-                      width: size,
-                      height: size,
-                      transform: `rotate(${item.rotate}deg)`,
-                    }}
-                  >
-                    <img
-                      className="loose-shadow"
-                      ref={(el) => {
-                        looseRefs.current[j] = el;
+              <ClothScene />
+                {loose.map((item, j) => {
+                  const g = ingredients[item.key];
+                  const a = (item.angle * Math.PI) / 180;
+                  const size = g.size * (item.scale ?? 1);
+                  return (
+                    <div
+                      key={`${item.key}-${j}`}
+                      className="loose"
+                      style={{
+                        left: HALF + Math.sin(a) * item.radius - size / 2,
+                        top: HALF - Math.cos(a) * item.radius - size / 2,
+                        width: size,
+                        height: size,
+                        transform: `rotate(${item.rotate}deg)`,
                       }}
-                      src={asset(g.shadow)}
-                      alt=""
-                      draggable={false}
-                    />
-                    <img src={asset(g.file)} alt="" draggable={false} />
-                  </div>
-                );
-              })}
+                    >
+                      <img
+                        className="loose-shadow"
+                        ref={(el) => {
+                          looseRefs.current[j] = el;
+                        }}
+                        src={asset(g.shadow)}
+                        alt=""
+                        draggable={false}
+                      />
+                      <img src={asset(g.file)} alt="" draggable={false} />
+                    </div>
+                  );
+                })}
               <div ref={lightRef} className="cloth-light" />
             </div>
 
@@ -915,6 +925,7 @@ export default function Hero() {
             })}
           </div>
         </div>
+        <div className="vignette" />
       </div>
 
       <div className="scrim" />

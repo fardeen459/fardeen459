@@ -165,20 +165,26 @@ button {
     overflow: hidden;
     /* the tint must blend with the linen and nothing else */
     isolation: isolate;
-    background-color: #dbd6ce;
+    /* the tint is the background colour, multiplied into the linen in the
+       same element: one layer instead of a blend layer on top */
+    background-color: var(--tint);
+    background-blend-mode: multiply;
     background-size: 500px 500px;
-    box-shadow:
-      inset 0 0 0 3px rgb(60 40 30 / 0.12),
-      inset 0 0 16px 3px rgb(50 30 20 / 0.2),
-      inset 0 0 110px 12px rgb(50 30 20 / 0.2);
   }
 
-  .cloth-tint {
+  /* the cloth's edge shading, drawn once in the world (not on the turning
+     table) so rotating never re-rasterises it */
+  .vignette {
     position: absolute;
-    inset: 0;
-    background-color: var(--tint);
-    mix-blend-mode: multiply;
+    left: -1000px;
+    top: -1000px;
+    width: 2000px;
+    height: 2000px;
+    border-radius: 50%;
+    pointer-events: none;
+    background: radial-gradient(closest-side, transparent 90%, rgb(50 30 20 / 0.28) 100%);
   }
+
 
   .cloth-lettering {
     position: absolute;
