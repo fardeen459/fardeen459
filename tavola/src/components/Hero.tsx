@@ -380,7 +380,7 @@ export default function Hero() {
         e.pos = next;
       } else {
         const x0 = e.pos - e.target;
-        if (Math.abs(x0) < 0.0004 && Math.abs(e.vel) < 0.002) {
+        if (Math.abs(x0) < 0.001 && Math.abs(e.vel) < 0.01) {
           e.pos = e.target;
           e.vel = 0;
         } else {
@@ -705,6 +705,82 @@ export default function Hero() {
         {say}
       </p>
 
+      {/* ---------- nav ---------- */}
+      <header className="hero-nav">
+        <a href="#menu" className="block flex-1 leading-none" aria-label={`${brand.name}, ${brand.tagline}`}>
+          <span className="block font-serif text-[1.12rem] font-medium tracking-[0.34em]">{brand.name}</span>
+          <span className="mt-[0.45rem] block text-[0.54rem] font-medium tracking-[0.3em] text-cream/55 uppercase">
+            {brand.tagline}
+          </span>
+        </a>
+
+        <nav aria-label="Primary" className="hidden flex-none pt-1 wide:block">
+          <ul className="flex gap-9">
+            {nav.map((item) => (
+              <li key={item.href}>
+                <a className="nav-link" href={item.href}>
+                  {item.label}
+                </a>
+              </li>
+            ))}
+          </ul>
+        </nav>
+
+        <div ref={orderRef} className="relative flex flex-1 justify-end pt-1">
+          <button
+            type="button"
+            className="nav-link flex items-center gap-2.5"
+            aria-expanded={orderOpen}
+            aria-controls="order-panel"
+            onClick={() => setOrderOpen((v) => !v)}
+          >
+            <span>Order</span>
+            <span key={count} className="badge" aria-hidden>
+              {count}
+            </span>
+            <span className="sr-only">
+              , {count} {count === 1 ? "portion" : "portions"}
+            </span>
+          </button>
+          {orderOpen && (
+            <div id="order-panel" className="order-panel" role="dialog" aria-label="Your order">
+              <p className="label">Your order</p>
+              {count === 0 ? (
+                <p className="mt-3 text-[0.9rem] leading-relaxed text-cream/70">
+                  Nothing yet. Turn the table, open a dish and add it from there.
+                </p>
+              ) : (
+                <>
+                  <ul className="mt-3 divide-y divide-cream/15 border-y border-cream/15 text-[0.9rem]">
+                    {dishes
+                      .filter((d) => order[d.id])
+                      .map((d) => (
+                        <li key={d.id} className="flex items-baseline justify-between gap-4 py-2.5">
+                          <span>
+                            <span className="text-cream/55 tabular-nums">{order[d.id]} ×</span> {d.name[0]} {d.name[1]}
+                          </span>
+                          <span className="tabular-nums">€{order[d.id] * d.price}</span>
+                        </li>
+                      ))}
+                  </ul>
+                  <div className="mt-3 flex items-baseline justify-between">
+                    <span className="label">Total</span>
+                    <span className="font-serif text-[1.5rem] leading-none">€{total}</span>
+                  </div>
+                  <button
+                    type="button"
+                    className="mt-4 text-[0.62rem] font-semibold tracking-[0.22em] text-cream/60 uppercase underline-offset-4 hover:text-cream hover:underline"
+                    onClick={() => setOrder({})}
+                  >
+                    Clear the order
+                  </button>
+                </>
+              )}
+            </div>
+          )}
+        </div>
+      </header>
+
       {/* ---------- the table ---------- */}
       <div
         ref={stageRef}
@@ -831,82 +907,6 @@ export default function Hero() {
 
       <div className="scrim" />
 
-      {/* ---------- nav ---------- */}
-      <header className="hero-nav">
-        <a href="#menu" className="block flex-1 leading-none" aria-label={`${brand.name}, ${brand.tagline}`}>
-          <span className="block font-serif text-[1.12rem] font-medium tracking-[0.34em]">{brand.name}</span>
-          <span className="mt-[0.45rem] block text-[0.54rem] font-medium tracking-[0.3em] text-cream/55 uppercase">
-            {brand.tagline}
-          </span>
-        </a>
-
-        <nav aria-label="Primary" className="hidden flex-none pt-1 wide:block">
-          <ul className="flex gap-9">
-            {nav.map((item) => (
-              <li key={item.href}>
-                <a className="nav-link" href={item.href}>
-                  {item.label}
-                </a>
-              </li>
-            ))}
-          </ul>
-        </nav>
-
-        <div ref={orderRef} className="relative flex flex-1 justify-end pt-1">
-          <button
-            type="button"
-            className="nav-link flex items-center gap-2.5"
-            aria-expanded={orderOpen}
-            aria-controls="order-panel"
-            onClick={() => setOrderOpen((v) => !v)}
-          >
-            <span>Order</span>
-            <span key={count} className="badge" aria-hidden>
-              {count}
-            </span>
-            <span className="sr-only">
-              , {count} {count === 1 ? "portion" : "portions"}
-            </span>
-          </button>
-          {orderOpen && (
-            <div id="order-panel" className="order-panel" role="dialog" aria-label="Your order">
-              <p className="label">Your order</p>
-              {count === 0 ? (
-                <p className="mt-3 text-[0.9rem] leading-relaxed text-cream/70">
-                  Nothing yet. Turn the table, open a dish and add it from there.
-                </p>
-              ) : (
-                <>
-                  <ul className="mt-3 divide-y divide-cream/15 border-y border-cream/15 text-[0.9rem]">
-                    {dishes
-                      .filter((d) => order[d.id])
-                      .map((d) => (
-                        <li key={d.id} className="flex items-baseline justify-between gap-4 py-2.5">
-                          <span>
-                            <span className="text-cream/55 tabular-nums">{order[d.id]} ×</span> {d.name[0]} {d.name[1]}
-                          </span>
-                          <span className="tabular-nums">€{order[d.id] * d.price}</span>
-                        </li>
-                      ))}
-                  </ul>
-                  <div className="mt-3 flex items-baseline justify-between">
-                    <span className="label">Total</span>
-                    <span className="font-serif text-[1.5rem] leading-none">€{total}</span>
-                  </div>
-                  <button
-                    type="button"
-                    className="mt-4 text-[0.62rem] font-semibold tracking-[0.22em] text-cream/60 uppercase underline-offset-4 hover:text-cream hover:underline"
-                    onClick={() => setOrder({})}
-                  >
-                    Clear the order
-                  </button>
-                </>
-              )}
-            </div>
-          )}
-        </div>
-      </header>
-
       {/* ---------- copy ---------- */}
       <div
         className="copy"
@@ -968,6 +968,8 @@ export default function Hero() {
                       key={d.id}
                       type="button"
                       className="tick"
+                      // the arrows either side (and the arrow keys) already do this from a keyboard
+                      tabIndex={-1}
                       aria-label={`${d.name[0]} ${d.name[1]}`}
                       aria-current={i === active ? "true" : undefined}
                       onClick={() => goTo(i)}

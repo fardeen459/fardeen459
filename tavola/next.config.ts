@@ -8,8 +8,9 @@ import type { NextConfig } from "next";
 const staticExport = process.env.TAVOLA_EXPORT === "1";
 
 const nextConfig: NextConfig = {
-  cacheComponents: true,
-  partialPrefetching: true,
+  // a static export has no server to stream from, so these two stay off there
+  cacheComponents: !staticExport,
+  partialPrefetching: !staticExport,
   ...(staticExport ? { output: "export" as const } : {}),
   turbopack: {
     // this app lives in a sub-folder of the repository

@@ -116,7 +116,8 @@ def herbs(c: Canvas, n, where, size=0.008, cols=("#3c7a22", "#2c5f1a", "#5c9a30"
 
 
 def tomato_wedge(c: Canvas, cx, cy, L, W, ang, skin, flesh):
-    """A wedge lying cut-face up: skin arc on one side, core on the other."""
+    """A wedge lying cut-face up: skin arc on one side, pale core on the other,
+    two seed pockets between thick walls of flesh."""
     skin, flesh = hexc(skin), hexc(flesh)
     sl, x, y = c.win(cx, cy, L * 0.62)
     u, v = local(x, y, cx, cy, ang)
@@ -126,29 +127,30 @@ def tomato_wedge(c: Canvas, cx, cy, L, W, ang, skin, flesh):
     k = k * (1 + 0.025 * c.noise(sl, 6 / L, 2))
     sd = np.maximum((k - 1) * b, -v)
     m = cov(sd, c.px)
-    wall = sstep(0.74, 0.86, k)
-    core = sstep(0.16 * b, 0.05 * b, v)
-    rib = np.exp(-(u / (0.07 * L)) ** 2)
-    gel = np.clip(1 - np.maximum(np.maximum(wall, core), rib), 0, 1)
-    gelcol = (flesh * 0.55 + hexc("#c8b02a") * 0.45) * 0.8
-    cv = mixc(flesh * 1.12, gelcol, gel)
-    cv = mixc(cv, flesh * 1.5 + 0.06, core * 0.7)
-    cv = mixc(cv, skin, sstep(0.9, 0.97, k))
-    cv = cv * (0.93 + 0.14 * c.noise(sl, 20 / L, 2))[..., None]
-    h = 0.062 * np.clip(1 - k * k, 0, 1) ** 0.35 * sstep(0.0, 0.03, v) * (1 - 0.12 * gel)
-    c.put(sl, m, h=h, mode="lay", span=0.03, col=cv, rough=0.2 - 0.1 * gel, coat=0.55 + 0.4 * gel, sss=0.95,
+    # two pockets of seed jelly, one either side of the central rib
+    pocket = np.zeros_like(k)
+    for sgn in (-1, 1):
+        pu, pv = (u - sgn * 0.21 * L) / (0.15 * L), (v - 0.46 * b) / (0.24 * b)
+        pocket = np.maximum(pocket, sstep(1.0, 0.72, np.sqrt(pu * pu + pv * pv)))
+    core = sstep(0.2 * b, 0.06 * b, v) * sstep(0.42 * L, 0.2 * L, np.abs(u))
+    fibre = 0.5 + 0.5 * np.cos(np.arctan2(v, u) * 26 + 3 * c.noise(sl, 5 / L, 2))
+    meat = flesh * (1.0 + 0.16 * fibre[..., None])
+    jelly = (flesh * 0.62 + hexc("#d9a326") * 0.38) * 0.78
+    cv = mixc(meat, jelly, pocket)
+    cv = mixc(cv, flesh * 1.35 + 0.08, core * 0.75)
+    cv = mixc(cv, skin * 0.92, sstep(0.86, 0.95, k))
+    h = 0.07 * np.clip(1 - k ** 2.4, 0, 1) ** 0.42 * sstep(0.0, 0.035, v) * (1 - 0.16 * pocket)
+    c.put(sl, m, h=h, mode="lay", span=0.03, col=cv, rough=0.24 - 0.14 * pocket, coat=0.45 + 0.5 * pocket, sss=0.9,
           spec=0.55, sssr=np.array([1.0, 0.25, 0.1], F))
-    # seeds suspended in the gel
-    for _ in range(9):
-        su = c.rng.uniform(-0.36, 0.36) * L
-        sv = c.rng.uniform(0.22, 0.62) * W
-        if abs(su) < 0.07 * L:
-            continue
-        ca, sa = np.cos(ang), np.sin(ang)
-        vx = sv - W * 0.42
-        px_, py_ = cx + su * ca - vx * sa, cy + su * sa + vx * ca
-        flecks(c, 1, lambda: (px_, py_), 0.0075 * (L / 0.25), [hexc("#f0e2a0")], height=0.003, aspect=(1.4, 2.0),
-               rough=0.3, sss=0.6, coat=0.5)
+    # a few seeds suspended in each pocket
+    ca, sa = np.cos(ang), np.sin(ang)
+    for sgn in (-1, 1):
+        for _ in range(4):
+            su = (sgn * 0.21 + c.rng.uniform(-0.085, 0.085)) * L
+            vx = (0.46 + c.rng.uniform(-0.13, 0.13)) * b - W * 0.42
+            px_, py_ = cx + su * ca - vx * sa, cy + su * sa + vx * ca
+            flecks(c, 1, lambda: (px_, py_), 0.0062 * (L / 0.25), [hexc("#f2e6ac")], height=0.0025,
+                   aspect=(1.5, 2.1), rough=0.3, sss=0.6, coat=0.5)
 
 
 def cherry_half(c: Canvas, cx, cy, r, skin, flesh):

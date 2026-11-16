@@ -48,7 +48,7 @@ export default function Sections() {
             {dishes.map((d, i) => (
               <li
                 key={d.id}
-                className="grid grid-cols-[2.2rem_1fr] items-baseline gap-x-4 gap-y-1 border-b border-cream/15 py-4 wide:grid-cols-[3rem_1fr_1fr_auto] wide:py-5"
+                className="grid grid-cols-[2.2rem_1fr] items-baseline gap-x-4 gap-y-1 border-b border-cream/15 py-4 wide:grid-cols-[3rem_1.1fr_1fr_11rem] wide:py-5"
               >
                 <span className="text-[0.7rem] tracking-[0.2em] text-cream/40 tabular-nums">{String(i + 1).padStart(2, "0")}</span>
                 <span className="font-serif text-[1.25rem] leading-tight font-[360]">

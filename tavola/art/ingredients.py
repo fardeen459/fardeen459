@@ -150,11 +150,18 @@ def raspberries(c: Canvas):
 
 
 def peppercorns(c: Canvas):
-    pts = [(-0.5, -0.3), (-0.12, -0.52), (0.3, -0.42), (0.6, -0.12), (0.1, -0.1), (-0.35, 0.12), (0.42, 0.25),
-           (-0.02, 0.4), (-0.62, 0.42), (0.66, 0.55), (0.25, 0.68), (-0.3, 0.68), (-0.72, -0.02)]
+    # a loose spill: keep trying random spots, rejecting any that would touch a neighbour
+    pts = []
+    tries = 0
+    while len(pts) < 15 and tries < 4000:
+        tries += 1
+        a, d = c.rng.uniform(0, TAU), 0.74 * c.rng.uniform(0, 1) ** 0.62
+        p = (d * np.cos(a) * 1.0, d * np.sin(a) * 0.82)
+        if all(np.hypot(p[0] - q[0], p[1] - q[1]) > 0.235 for q in pts):
+            pts.append(p)
     cols = ["#1f1712", "#2a1e16", "#17110d", "#1f1712", "#a84a3c", "#2a1e16", "#1c1510", "#6e7a3a", "#241a13"]
     for i, (px_, py_) in enumerate(pts):
-        r = c.rng.uniform(0.095, 0.125)
+        r = c.rng.uniform(0.085, 0.118)
         sl, m, k = mound(c, px_, py_, r, height=r * 0.95, power=0.5, lumps=0.22, lump_freq=22,
                          col=hexc(cols[i % len(cols)]), rough=0.55, coat=0.15, sss=0.1, mode="rest", alpha=True)
         wr = c.noise(sl, 26, 2)

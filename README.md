@@ -32,3 +32,7 @@ npm run build    # production build in dist/
 
 ## Editing content
 All business info (phone, hours, services, FAQ, gallery) lives in `src/data.js`.
+
+## Also in this repository
+
+[`tavola/`](tavola) is a separate project with its own `package.json` and README: a restaurant hero where the menu is a round table seen from above, and you turn the table to choose a dish (Next.js, TypeScript, Tailwind v4).
