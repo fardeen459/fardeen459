@@ -1,0 +1,895 @@
+@import "tailwindcss";
+
+/* One breakpoint decides the whole composition: a landscape screen gets the
+   table pushed to the lower right with the copy on the left; anything else
+   gets the table under the plate and the copy at the bottom. Hero.tsx reads
+   the very same query, so layout and camera can never disagree. */
+@custom-variant wide (@media (min-width: 860px) and (min-aspect-ratio: 21/20));
+
+@theme inline {
+  --font-serif: var(--font-fraunces), "Iowan Old Style", "Palatino Linotype", Georgia, serif;
+  --font-sans: var(--font-dm-sans), ui-sans-serif, system-ui, sans-serif;
+  --color-cream: #f5ede1;
+  --color-ink: #17110e;
+}
+
+/* Registered so the three per-dish colours can be transitioned as colours,
+   gradients included. */
+@property --floor {
+  syntax: "<color>";
+  inherits: true;
+  initial-value: #2a1411;
+}
+@property --accent {
+  syntax: "<color>";
+  inherits: true;
+  initial-value: #f0714f;
+}
+@property --tint {
+  syntax: "<color>";
+  inherits: true;
+  initial-value: #ecdccb;
+}
+
+html {
+  background: var(--color-ink);
+  scroll-behavior: smooth;
+}
+
+body {
+  font-family: var(--font-sans);
+  color: var(--color-cream);
+  background: var(--color-ink);
+}
+
+button {
+  cursor: pointer;
+}
+
+@layer components {
+  /* ================================================================
+     Hero shell
+     ================================================================ */
+  .hero {
+    --gutter: clamp(1.25rem, 3.4vw, 4rem);
+    --title: clamp(2.3rem, min(11.5vw, 6.6svh), 3.5rem);
+    --copy-top: clamp(5.75rem, 20svh, 13.5rem);
+    --line: rgb(245 237 225 / 0.16);
+    --muted: rgb(245 237 225 / 0.68);
+    position: relative;
+    height: 100svh;
+    min-height: 35rem;
+    overflow: hidden;
+    isolation: isolate;
+    background-color: var(--floor);
+    color: var(--color-cream);
+    transition:
+      --floor 1.3s ease,
+      --accent 1.3s ease,
+      --tint 1.3s ease;
+    overscroll-behavior-x: contain;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  /* the floor: faint boards and a vignette */
+  .hero::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    z-index: 0;
+    pointer-events: none;
+    background:
+      radial-gradient(120% 95% at 68% 58%, transparent 38%, rgb(0 0 0 / 0.4) 100%),
+      repeating-linear-gradient(90deg, rgb(255 255 255 / 0.028) 0 1px, transparent 1px 7.5rem),
+      repeating-linear-gradient(90deg, rgb(0 0 0 / 0.06) 0 2.6rem, transparent 2.6rem 7.5rem);
+  }
+
+  .hero :is(a, button):focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 3px;
+    border-radius: 4px;
+  }
+
+  @variant wide {
+    .hero {
+      --title: clamp(2.5rem, min(3.9vw, 8svh), 4.6rem);
+    }
+  }
+
+  /* ================================================================
+     Stage: world (camera) > table (rotation) > cloth + plates
+     ================================================================ */
+  .stage {
+    position: absolute;
+    inset: 0;
+    z-index: 1;
+    touch-action: pan-y;
+    user-select: none;
+    -webkit-user-select: none;
+  }
+
+  .world {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 0;
+    height: 0;
+    transform-origin: 0 0;
+    will-change: transform;
+    opacity: 0;
+    transition: opacity 0.9s ease;
+  }
+  .hero:not([data-phase="loading"]) .world {
+    opacity: 1;
+  }
+
+  /* the table's own shadow on the floor; it does not turn */
+  .table-shadow {
+    position: absolute;
+    left: -1000px;
+    top: -1000px;
+    width: 2000px;
+    height: 2000px;
+    border-radius: 50%;
+    pointer-events: none;
+    transform: translate(36px, 62px) scale(1.07);
+    background: radial-gradient(closest-side, rgb(0 0 0 / 0.6) 84%, rgb(0 0 0 / 0.26) 92%, transparent 100%);
+  }
+
+  .table {
+    position: absolute;
+    left: -1000px;
+    top: -1000px;
+    width: 2000px;
+    height: 2000px;
+    will-change: transform;
+    cursor: grab;
+  }
+  .hero[data-drag="true"] .table,
+  .hero[data-drag="true"] .plate-btn {
+    cursor: grabbing;
+  }
+  .hero[data-open="true"] .table {
+    cursor: zoom-out;
+  }
+
+  /* ---- the cloth ------------------------------------------------ */
+  .cloth {
+    position: absolute;
+    inset: 0;
+    border-radius: 50%;
+    overflow: hidden;
+    /* the tint must blend with the linen and nothing else */
+    isolation: isolate;
+    background-color: #dbd6ce;
+    background-size: 500px 500px;
+    box-shadow:
+      inset 0 0 0 3px rgb(60 40 30 / 0.12),
+      inset 0 0 16px 3px rgb(50 30 20 / 0.2),
+      inset 0 0 110px 12px rgb(50 30 20 / 0.2);
+  }
+
+  .cloth-tint {
+    position: absolute;
+    inset: 0;
+    background-color: var(--tint);
+    mix-blend-mode: multiply;
+  }
+
+  .cloth-lettering {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    transition: opacity 0.6s ease;
+  }
+  .ring-text {
+    font-family: var(--font-serif);
+    font-size: 27px;
+    font-weight: 560;
+    fill: rgb(72 50 40 / 0.5);
+  }
+  .stitch {
+    fill: none;
+    stroke: rgb(72 50 40 / 0.3);
+    stroke-width: 2.5;
+    stroke-dasharray: 11 8;
+    stroke-linecap: round;
+  }
+  .hem {
+    fill: none;
+    stroke: rgb(72 50 40 / 0.2);
+    stroke-width: 3;
+    stroke-dasharray: 15 10;
+    stroke-linecap: round;
+  }
+
+  .loose {
+    position: absolute;
+    pointer-events: none;
+    transition: opacity 0.6s ease;
+  }
+  .loose img {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    will-change: transform;
+  }
+  .loose-shadow {
+    opacity: 0.55;
+  }
+
+  /* fixed light from the upper left: counter-rotated every frame. Drawn
+     small and scaled up, a gradient does not need 2000 px of texture. */
+  .cloth-light {
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    width: 250px;
+    height: 250px;
+    margin: -125px 0 0 -125px;
+    will-change: transform;
+    pointer-events: none;
+    background:
+      radial-gradient(78% 78% at 24% 20%, rgb(255 248 236 / 0.3), transparent 64%),
+      radial-gradient(88% 88% at 80% 86%, rgb(40 22 12 / 0.36), transparent 66%);
+  }
+
+  /* ---- plates --------------------------------------------------- */
+  .plate {
+    position: absolute;
+    left: 1000px;
+    top: 1000px;
+    width: 0;
+    height: 0;
+    will-change: transform;
+    transition: opacity 0.7s ease;
+  }
+
+  /* its own element so it can be turned against the table: the light then
+     always comes from the same side of the screen */
+  .plate-shadow {
+    position: absolute;
+    left: -230px;
+    top: -230px;
+    width: 460px;
+    height: 460px;
+    border-radius: 50%;
+    will-change: transform;
+    pointer-events: none;
+    background: radial-gradient(
+      closest-side,
+      rgb(34 18 10 / 0.6) 64%,
+      rgb(34 18 10 / 0.42) 76%,
+      rgb(34 18 10 / 0.2) 87%,
+      rgb(34 18 10 / 0.06) 95%,
+      rgb(34 18 10 / 0) 100%
+    );
+  }
+
+  .plate-btn {
+    position: absolute;
+    left: -230px;
+    top: -230px;
+    width: 460px;
+    height: 460px;
+    display: block;
+    padding: 0;
+    border: 0;
+    border-radius: 50%;
+    background: none;
+    cursor: pointer;
+  }
+  .hero .plate-btn:focus-visible {
+    outline: 6px solid var(--accent);
+    outline-offset: 10px;
+    border-radius: 50%;
+  }
+  .plate-btn img {
+    display: block;
+    width: 100%;
+    height: 100%;
+    will-change: transform;
+    pointer-events: none;
+    -webkit-user-drag: none;
+  }
+
+  /* ---- ingredients that fly out of an open dish ----------------- */
+  .burst {
+    position: absolute;
+    left: 1000px;
+    top: 1000px;
+    width: 0;
+    height: 0;
+    pointer-events: none;
+  }
+  .burst-item {
+    --x: calc(var(--bx) * var(--burst-k, 0.9));
+    --y: calc(var(--by) * var(--burst-k, 0.9));
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: var(--size);
+    height: var(--size);
+    margin: calc(var(--size) / -2) 0 0 calc(var(--size) / -2);
+    opacity: 0;
+    transform: translate(0, 0) rotate(calc(var(--r) - 80deg)) scale(0.3);
+    will-change: transform, opacity;
+    transition:
+      transform 0.5s cubic-bezier(0.6, 0, 0.85, 0.25),
+      opacity 0.22s ease 0.24s;
+  }
+  .hero[data-open="true"] .burst-item {
+    opacity: 1;
+    transform: translate(var(--x), var(--y)) rotate(var(--r)) scale(1);
+    /* the curve runs past 1 before it settles: that is the overshoot */
+    transition:
+      transform 1s cubic-bezier(0.3, 1.55, 0.45, 1) calc(0.3s + var(--i) * 0.075s),
+      opacity 0.3s ease calc(0.3s + var(--i) * 0.075s);
+  }
+  .burst-item img {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+  }
+  .burst-shadow {
+    opacity: 0.5;
+    transform: translate(18px, 26px) scale(1.04);
+  }
+  .burst-img {
+    animation: float 6.5s ease-in-out infinite;
+    animation-delay: calc(var(--i) * -1.7s);
+  }
+  @keyframes float {
+    0%,
+    100% {
+      transform: translate(0, 5px) rotate(-1.5deg);
+    }
+    50% {
+      transform: translate(0, -9px) rotate(2.5deg);
+    }
+  }
+
+  /* ---- an open dish clears the table ---------------------------- */
+  .hero[data-open="true"] .plate:not([data-front="true"]) {
+    opacity: 0.05;
+  }
+  .hero[data-open="true"] :is(.cloth-lettering, .loose) {
+    opacity: 0;
+  }
+
+  /* ================================================================
+     Scrim: keeps the copy on dark floor whatever the table does
+     ================================================================ */
+  .scrim {
+    position: absolute;
+    inset: 0;
+    z-index: 2;
+    pointer-events: none;
+    background: linear-gradient(
+      to top,
+      var(--floor) 0%,
+      var(--floor) 24%,
+      color-mix(in srgb, var(--floor) 95%, transparent) 36%,
+      color-mix(in srgb, var(--floor) 62%, transparent) 46%,
+      color-mix(in srgb, var(--floor) 0%, transparent) 60%
+    );
+  }
+  @variant wide {
+    .scrim {
+      background: linear-gradient(
+        to right,
+        var(--floor) 0%,
+        color-mix(in srgb, var(--floor) 90%, transparent) 21%,
+        color-mix(in srgb, var(--floor) 0%, transparent) 46%
+      );
+    }
+  }
+
+  /* ================================================================
+     Nav
+     ================================================================ */
+  .hero-nav {
+    position: absolute;
+    z-index: 6;
+    inset: 0 0 auto 0;
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    padding: clamp(1rem, 2.8svh, 1.9rem) var(--gutter);
+    pointer-events: none;
+  }
+  .hero-nav > * {
+    pointer-events: auto;
+  }
+  .nav-link {
+    font-size: 0.66rem;
+    font-weight: 500;
+    letter-spacing: 0.24em;
+    text-transform: uppercase;
+    color: rgb(245 237 225 / 0.74);
+    transition: color 0.25s ease;
+  }
+  .nav-link:hover {
+    color: var(--color-cream);
+  }
+  .badge {
+    display: grid;
+    place-items: center;
+    min-width: 1.25rem;
+    height: 1.25rem;
+    padding: 0 0.3rem;
+    border-radius: 999px;
+    background: var(--accent);
+    color: #1a120e;
+    font-size: 0.62rem;
+    font-weight: 700;
+    letter-spacing: 0;
+    animation: bump 0.5s cubic-bezier(0.3, 1.6, 0.5, 1) backwards;
+  }
+  @keyframes bump {
+    from {
+      transform: scale(0.4);
+    }
+  }
+  .order-panel {
+    position: absolute;
+    right: 0;
+    top: calc(100% + 0.8rem);
+    width: min(20.5rem, calc(100vw - 2.5rem));
+    padding: 1.15rem 1.25rem 1.2rem;
+    border-radius: 1rem;
+    border: 1px solid var(--line);
+    background: color-mix(in srgb, var(--floor) 80%, #f5ede1);
+    box-shadow: 0 1.4rem 3.2rem rgb(0 0 0 / 0.5);
+    animation: fadeUp 0.35s cubic-bezier(0.2, 0.7, 0.2, 1) backwards;
+  }
+
+  /* ================================================================
+     Copy
+     ================================================================ */
+  .copy {
+    position: absolute;
+    z-index: 3;
+    left: var(--gutter);
+    right: var(--gutter);
+    bottom: max(1.35rem, env(safe-area-inset-bottom));
+    pointer-events: none;
+    transition:
+      opacity 0.45s ease,
+      transform 0.6s cubic-bezier(0.2, 0.7, 0.2, 1);
+  }
+  .copy :is(a, button) {
+    pointer-events: auto;
+  }
+  .hero[data-open="true"] .copy {
+    opacity: 0;
+    transform: translateY(1.2rem);
+  }
+  @variant wide {
+    .copy {
+      right: auto;
+      bottom: auto;
+      top: var(--copy-top);
+      width: min(27rem, 31vw);
+    }
+    .hero[data-open="true"] .copy {
+      opacity: 1;
+      transform: none;
+    }
+  }
+
+  .label {
+    font-size: 0.62rem;
+    font-weight: 600;
+    letter-spacing: 0.24em;
+    text-transform: uppercase;
+    color: rgb(245 237 225 / 0.5);
+  }
+
+  .meta {
+    display: flex;
+    align-items: center;
+    gap: 0.7rem;
+    height: 1rem;
+    font-size: 0.64rem;
+    font-weight: 500;
+    letter-spacing: 0.24em;
+    text-transform: uppercase;
+    color: var(--muted);
+    font-variant-numeric: tabular-nums;
+  }
+  .meta .rule {
+    width: 2.2rem;
+    height: 1px;
+    background: currentColor;
+    opacity: 0.55;
+  }
+
+  /* the name: two lines, each rising out of its own mask */
+  .title {
+    position: relative;
+    margin-top: 0.56rem;
+    font-family: var(--font-serif);
+    font-size: var(--title);
+    font-weight: 360;
+    line-height: 1.04;
+    letter-spacing: -0.02em;
+    font-variation-settings:
+      "opsz" 144,
+      "SOFT" 40;
+  }
+  .title-layer {
+    display: block;
+  }
+  .title-layer.is-out {
+    position: absolute;
+    inset: 0;
+  }
+  .mask {
+    display: block;
+    overflow: hidden;
+    /* room for italic overhang and descenders, taken back by the margins */
+    padding: 0.06em 0.16em 0.2em 0.08em;
+    margin: -0.06em -0.16em -0.2em -0.08em;
+  }
+  .line {
+    display: block;
+    white-space: nowrap;
+  }
+  .line.accent {
+    font-style: italic;
+    font-weight: 340;
+    color: var(--accent);
+  }
+  .is-in .line {
+    animation: rise 0.95s cubic-bezier(0.2, 0.75, 0.2, 1) backwards;
+  }
+  .is-in .mask:nth-child(2) .line {
+    animation-delay: 0.09s;
+  }
+  .is-out .line {
+    animation: leave 0.5s cubic-bezier(0.55, 0, 0.85, 0.35) forwards;
+  }
+  @keyframes rise {
+    from {
+      transform: translateY(calc(125% * var(--dir, 1)));
+    }
+  }
+  @keyframes leave {
+    to {
+      transform: translateY(calc(-125% * var(--dir, 1)));
+    }
+  }
+
+  /* `backwards`, not `both`: a held end state would beat the rules that
+     fade these out again when a dish opens */
+  .fade-up {
+    animation: fadeUp 0.8s cubic-bezier(0.2, 0.7, 0.2, 1) backwards;
+    animation-delay: var(--d, 0s);
+  }
+  @keyframes fadeUp {
+    from {
+      opacity: 0;
+      transform: translateY(0.7rem);
+    }
+  }
+
+  .browse {
+    transition:
+      opacity 0.4s ease,
+      transform 0.6s cubic-bezier(0.2, 0.7, 0.2, 1);
+  }
+  .hero[data-open="true"] .browse {
+    opacity: 0;
+    transform: translateY(0.8rem);
+  }
+  .hero[data-open="true"] .browse :is(a, button) {
+    pointer-events: none;
+  }
+
+  .lede {
+    max-width: 23.5rem;
+    font-size: 0.94rem;
+    line-height: 1.55;
+    color: var(--muted);
+    text-wrap: pretty;
+  }
+
+  .price {
+    font-family: var(--font-serif);
+    font-size: 1.65rem;
+    font-weight: 360;
+    line-height: 1;
+    font-variation-settings: "opsz" 60;
+  }
+
+  .pill {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.65rem;
+    height: 2.6rem;
+    padding: 0 1.2rem;
+    border-radius: 999px;
+    background: var(--color-cream);
+    color: #1c1410;
+    font-size: 0.63rem;
+    font-weight: 700;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    white-space: nowrap;
+    transition:
+      background-color 0.3s ease,
+      color 0.3s ease,
+      transform 0.2s ease;
+  }
+  .hero .pill:focus-visible {
+    border-radius: 999px;
+  }
+  .pill:hover {
+    background: #fff;
+  }
+  .pill:active {
+    transform: scale(0.97);
+  }
+  .pill[data-done="true"] {
+    background: var(--accent);
+  }
+  .pill svg {
+    transition: transform 0.3s ease;
+  }
+  .pill:hover svg {
+    transform: translateX(3px);
+  }
+
+  .round {
+    display: grid;
+    place-items: center;
+    width: 2.5rem;
+    height: 2.5rem;
+    flex: none;
+    border-radius: 50%;
+    border: 1px solid rgb(245 237 225 / 0.32);
+    transition:
+      background-color 0.25s ease,
+      border-color 0.25s ease,
+      color 0.25s ease;
+  }
+  .hero .round:focus-visible {
+    border-radius: 50%;
+  }
+  .round:hover {
+    background: var(--color-cream);
+    border-color: var(--color-cream);
+    color: #1c1410;
+  }
+
+  .tick {
+    display: grid;
+    place-items: center;
+    height: 2.5rem;
+    padding: 0 0.2rem;
+  }
+  .tick::before {
+    content: "";
+    width: 0.95rem;
+    height: 2px;
+    border-radius: 2px;
+    background: rgb(245 237 225 / 0.28);
+    transition:
+      background-color 0.4s ease,
+      width 0.5s cubic-bezier(0.2, 0.7, 0.2, 1);
+  }
+  .tick:hover::before {
+    background: rgb(245 237 225 / 0.75);
+  }
+  .tick[aria-current="true"]::before {
+    width: 1.6rem;
+    background: var(--accent);
+  }
+
+  /* ================================================================
+     Details: a sheet on a phone, the left column on a wide screen
+     ================================================================ */
+  .detail {
+    /* the sticky order bar needs this exact colour behind it */
+    --sheet: color-mix(in srgb, var(--floor) 88%, #f5ede1);
+    position: absolute;
+    z-index: 4;
+    inset: auto 0 0 0;
+    height: 58svh; /* keep in step with SHEET in Hero.tsx */
+    padding: 0 var(--gutter);
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    border-radius: 1.4rem 1.4rem 0 0;
+    background: var(--sheet);
+    box-shadow: 0 -1.5rem 3rem rgb(0 0 0 / 0.4);
+    outline: none;
+    visibility: hidden;
+    transform: translateY(104%);
+    transition:
+      transform 0.55s cubic-bezier(0.5, 0, 0.8, 0.4),
+      visibility 0s linear 0.55s;
+  }
+  .hero[data-open="true"] .detail {
+    visibility: visible;
+    transform: none;
+    transition:
+      transform 0.8s cubic-bezier(0.2, 0.85, 0.2, 1) 0.12s,
+      visibility 0s;
+  }
+  .hero[data-open="true"] .detail .stagger {
+    animation: fadeUp 0.7s cubic-bezier(0.2, 0.7, 0.2, 1) backwards;
+    animation-delay: calc(0.34s + var(--n, 0) * 0.07s);
+  }
+  .detail-grip {
+    width: 2.4rem;
+    height: 4px;
+    margin: 0.7rem auto 0.9rem;
+    border-radius: 4px;
+    background: rgb(245 237 225 / 0.28);
+  }
+  .detail-bar {
+    position: sticky;
+    bottom: 0;
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    margin-top: 1.25rem;
+    padding: 0.9rem 0 max(1rem, env(safe-area-inset-bottom));
+    background: var(--sheet);
+    box-shadow: 0 -1px 0 var(--line);
+  }
+  .back {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.6rem;
+    font-size: 0.62rem;
+    font-weight: 600;
+    letter-spacing: 0.24em;
+    text-transform: uppercase;
+    color: var(--muted);
+    transition: color 0.25s ease;
+  }
+  .back:hover {
+    color: var(--color-cream);
+  }
+  .sheet-title {
+    font-family: var(--font-serif);
+    font-size: 1.9rem;
+    font-weight: 360;
+    line-height: 1.05;
+    letter-spacing: -0.02em;
+    font-variation-settings:
+      "opsz" 144,
+      "SOFT" 40;
+  }
+  .sheet-title em {
+    font-weight: 340;
+    color: var(--accent);
+  }
+  .plate-list li {
+    padding: 0.5rem 0;
+    border-bottom: 1px solid var(--line);
+    font-size: 0.9rem;
+    line-height: 1.35;
+  }
+  .plate-list li:first-child {
+    border-top: 1px solid var(--line);
+  }
+  .stepper {
+    display: flex;
+    align-items: center;
+    height: 2.6rem;
+    flex: none;
+    border-radius: 999px;
+    border: 1px solid rgb(245 237 225 / 0.32);
+    font-variant-numeric: tabular-nums;
+  }
+  .stepper button {
+    display: grid;
+    place-items: center;
+    width: 2.3rem;
+    height: 100%;
+    border-radius: 999px;
+    font-size: 1rem;
+    color: var(--muted);
+    transition: color 0.2s ease;
+  }
+  .stepper button:hover:not(:disabled) {
+    color: var(--color-cream);
+  }
+  .stepper button:disabled {
+    opacity: 0.35;
+    cursor: default;
+  }
+  .stepper output {
+    min-width: 1.1rem;
+    text-align: center;
+    font-size: 0.86rem;
+    font-weight: 600;
+  }
+
+  @variant wide {
+    .detail {
+      inset: calc(var(--copy-top) + 1.56rem + var(--title) * 2.08 + 1.35rem) auto auto var(--gutter);
+      width: min(25rem, 29vw);
+      height: auto;
+      padding: 0;
+      overflow: visible;
+      border-radius: 0;
+      background: none;
+      box-shadow: none;
+      opacity: 0;
+      transform: translateY(0.9rem);
+      transition:
+        opacity 0.3s ease,
+        transform 0.45s ease,
+        visibility 0s linear 0.45s;
+    }
+    .hero[data-open="true"] .detail {
+      opacity: 1;
+      transition:
+        opacity 0.5s ease 0.2s,
+        transform 0.8s cubic-bezier(0.2, 0.7, 0.2, 1) 0.2s,
+        visibility 0s;
+    }
+    .detail-bar {
+      position: static;
+      padding: 0;
+      background: none;
+      box-shadow: none;
+    }
+    .hero {
+      --burst-k: 1;
+    }
+  }
+
+  /* short landscape windows: tighten the left column so it still fits */
+  @media (min-width: 860px) and (min-aspect-ratio: 21/20) and (max-height: 760px) {
+    .hero {
+      --copy-top: clamp(4.75rem, 14svh, 9rem);
+      --title: clamp(2.3rem, min(3.9vw, 7.2svh), 4.6rem);
+    }
+    .plate-list li {
+      padding: 0.3rem 0;
+      font-size: 0.85rem;
+    }
+    .lede {
+      font-size: 0.88rem;
+      line-height: 1.5;
+    }
+    .detail > * {
+      --tight: 0.8rem;
+    }
+    .detail > :is(div, dl, p) {
+      margin-top: var(--tight);
+    }
+  }
+  @media (min-width: 860px) and (min-aspect-ratio: 21/20) and (max-height: 620px) {
+    /* the sentence is already known from the table view */
+    .detail > .lede {
+      display: none;
+    }
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+  .hero,
+  .hero *,
+  .hero *::before {
+    animation-duration: 0.01ms !important;
+    animation-delay: 0s !important;
+    transition-duration: 0.01ms !important;
+    transition-delay: 0s !important;
+  }
+  .burst-img {
+    animation: none !important;
+  }
+}
