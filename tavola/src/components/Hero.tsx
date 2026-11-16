@@ -136,6 +136,9 @@ type Engine = {
   /** was the last change of dish the visitor's doing? */
   byUser: boolean;
   shown: number;
+  /** where `target` stood when the current trackpad swipe began, and how far it has travelled */
+  wheelFrom: number | null;
+  wheelSum: number;
   wheelTimer: number;
 };
 
@@ -166,6 +169,8 @@ function createEngine(): Engine {
     lastTouch: 0,
     byUser: false,
     shown: 0,
+    wheelFrom: null,
+    wheelSum: 0,
     wheelTimer: 0,
   };
 }
@@ -552,13 +557,20 @@ export default function Hero() {
       const ax = Math.abs(ev.deltaX);
       if (ax < 1 || ax < Math.abs(ev.deltaY) * 1.2) return;
       ev.preventDefault();
-      const px = ev.deltaMode === 1 ? ev.deltaX * 16 : ev.deltaX;
-      e.target += clamp(px, -120, 120) / 340;
+      // One swipe is one gesture: add up its travel (inertia included) and cap
+      // it, so a hard flick turns the table a few plates, not all the way round.
+      if (e.wheelFrom === null) {
+        e.wheelFrom = e.target;
+        e.wheelSum = 0;
+      }
+      e.wheelSum += ev.deltaMode === 1 ? ev.deltaX * 16 : ev.deltaX;
+      e.target = e.wheelFrom + clamp(e.wheelSum / 380, -2.6, 2.6);
       e.lastTouch = performance.now();
       e.byUser = true;
       window.clearTimeout(e.wheelTimer);
       e.wheelTimer = window.setTimeout(() => {
         e.target = Math.round(e.target);
+        e.wheelFrom = null;
       }, 130);
     };
     stage.addEventListener("wheel", onWheel, { passive: false });
