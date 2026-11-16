@@ -67,12 +67,20 @@ const wrap = (d: number) => {
   return m > N / 2 ? m - N : m;
 };
 
+/** On a phone: the free band between the bottom of the nav and the top of the copy. */
+type Room = { top: number; bottom: number };
+
 /**
  * The three camera views. Each is where the centre of the table sits on
  * screen and how many pixels one table unit is worth. `front` is the angle
  * (clockwise from 12 o'clock) at which the chosen plate comes to rest.
  */
-function computeLayout(W: number, H: number, wide: boolean): Layout {
+function computeLayout(
+  W: number,
+  H: number,
+  wide: boolean,
+  room?: Room,
+): Layout {
   const dia = PLATE * (1 + BOOST);
   if (wide) {
     // The table is pushed down and to the right: the front plate rests at
@@ -103,14 +111,17 @@ function computeLayout(W: number, H: number, wide: boolean): Layout {
       },
     };
   }
-  // Phone: the plate sits near the top, the table hangs below the middle of
-  // the screen and the neighbours peek in from both sides.
-  const sB = clamp(Math.min((W * 0.74) / dia, (H * 0.37) / dia), 0.18, 1.2);
-  const yB = Math.max(70 + (dia * sB) / 2 + 10, H * 0.3);
+  // Phone: the front plate fills the band between the nav and the copy (both
+  // measured, so a big system font or a short in-app viewer still fits), the
+  // table hangs below it and the neighbours peek in from both sides.
+  const top = room?.top ?? 70;
+  const band = Math.max(60, (room?.bottom ?? H * 0.6) - top - 14);
+  const sB = clamp(Math.min((W * 0.74) / dia, band / dia), 0.12, 1.2);
+  const yB = top + 6 + band / 2;
   // Open: the plate shrinks to sit, with its ingredients, above the sheet.
-  const room = H * (1 - SHEET) - 58;
-  const sD = clamp(Math.min(W / 880, room / 900), 0.14, sB);
-  const yD = 58 + room * 0.5;
+  const above = Math.max(60, H * (1 - SHEET) - top - 8);
+  const sD = clamp(Math.min(W / 880, above / 900), 0.1, sB);
+  const yD = top + 4 + above / 2;
   return {
     wide,
     front: 0,
@@ -258,7 +269,9 @@ function RingText() {
       const style = getComputedStyle(el);
       ctx.font = `${style.fontWeight} ${style.fontSize} ${style.fontFamily}`;
       const widths = LETTERS.map((ch) => ctx.measureText(ch).width);
-      const gap = (2 * Math.PI * RING_R - widths.reduce((a, b) => a + b, 0)) / LETTERS.length;
+      const gap =
+        (2 * Math.PI * RING_R - widths.reduce((a, b) => a + b, 0)) /
+        LETTERS.length;
       let along = 0;
       setAngles(
         widths.map((w) => {
@@ -362,6 +375,9 @@ export default function Hero() {
   const [dir, setDir] = useState(1);
   const [open, setOpen] = useState(false);
   const [phase, setPhase] = useState<"loading" | "intro" | "ready">("loading");
+  // the copy is laid out from the start (so the table can be fitted around it)
+  // and its entrance animations replay, by key, when it is revealed
+  const ready = phase === "ready";
   const [dragging, setDragging] = useState(false);
   const [portions, setPortions] = useState(1);
   const [added, setAdded] = useState(false);
@@ -381,6 +397,9 @@ export default function Hero() {
   const looseShadowsRef = useRef<HTMLDivElement>(null);
   const detailRef = useRef<HTMLDivElement>(null);
   const orderRef = useRef<HTMLDivElement>(null);
+  const navRef = useRef<HTMLElement>(null);
+  const copyRef = useRef<HTMLDivElement>(null);
+  const ledeRef = useRef<HTMLDivElement>(null);
   const openerRef = useRef<HTMLElement | null>(null);
   const engineRef = useRef<Engine | null>(null);
   if (engineRef.current === null) engineRef.current = createEngine();
@@ -463,7 +482,39 @@ export default function Hero() {
 
     const measure = () => {
       const box = hero.getBoundingClientRect();
-      e.layout = computeLayout(box.width, box.height, wideQuery.matches);
+      const wide = wideQuery.matches;
+      let room: Room | undefined;
+      const copy = copyRef.current;
+      const nav = navRef.current;
+      const lede = ledeRef.current;
+      if (!wide && copy && nav) {
+        // Where the copy would start with its sentence showing. The copy is
+        // pinned to the bottom, so the sentence block adds its height on top.
+        const sentence = lede
+          ? lede.offsetHeight +
+            parseFloat(getComputedStyle(lede).marginTop || "0")
+          : 0;
+        const compactNow = hero.dataset.compact === "true";
+        const fullTop = copy.offsetTop - (compactNow ? sentence : 0);
+        const top = nav.offsetTop + nav.offsetHeight;
+        // too little room for a decent plate: keep the plate, drop the sentence
+        const compact =
+          Math.min(box.width * 0.74, fullTop - top - 14) < box.width * 0.5;
+        if (compact !== compactNow) {
+          if (compact) hero.dataset.compact = "true";
+          else delete hero.dataset.compact;
+        }
+        const copyTop = compact ? fullTop + sentence : fullTop;
+        room = { top, bottom: copyTop };
+        hero.style.setProperty(
+          "--copy-h",
+          `${Math.max(0, box.height - copyTop)}px`,
+        );
+      } else {
+        delete hero.dataset.compact;
+        hero.style.removeProperty("--copy-h");
+      }
+      e.layout = computeLayout(box.width, box.height, wide, room);
       e.to = e.layout[e.view];
       if (e.intro >= 0) e.from = e.layout.overview;
       else if (e.camT >= 1) e.cam = { ...e.to };
@@ -476,6 +527,9 @@ export default function Hero() {
     };
     const resize = new ResizeObserver(measure);
     resize.observe(hero);
+    // the copy and the nav change size with the font, the text size setting and the dish
+    if (copyRef.current) resize.observe(copyRef.current);
+    if (navRef.current) resize.observe(navRef.current);
     wideQuery.addEventListener("change", measure);
     motionQuery.addEventListener("change", onMotion);
 
@@ -974,7 +1028,7 @@ export default function Hero() {
       </p>
 
       {/* ---------- nav ---------- */}
-      <header className="hero-nav">
+      <header ref={navRef} className="hero-nav">
         <a
           href="#menu"
           className="block flex-1 leading-none"
@@ -1191,118 +1245,130 @@ export default function Hero() {
 
       {/* ---------- copy ---------- */}
       <div
+        ref={copyRef}
         className="copy"
         onPointerEnter={(ev) => ev.pointerType === "mouse" && hold(true)}
         onPointerLeave={() => hold(false)}
         onFocus={(ev) => ev.target.matches(":focus-visible") && hold(true)}
         onBlur={() => hold(false)}
       >
-        {phase === "ready" && (
-          <>
-            <p key={`meta-${active}`} className="meta fade-up">
-              <span>
-                {pad(active + 1)} <span className="opacity-45">/ {pad(N)}</span>
-              </span>
-              <span className="rule" />
-              <span>{dish.course}</span>
-            </p>
+        <>
+          <p key={`meta-${active}-${ready}`} className="meta fade-up">
+            <span>
+              {pad(active + 1)} <span className="opacity-45">/ {pad(N)}</span>
+            </span>
+            <span className="rule" />
+            <span>{dish.course}</span>
+          </p>
 
-            <h2 className="title" aria-label={fullName}>
-              {prev !== null && prev !== active && (
-                <span
-                  key={`out-${prev}`}
-                  className="title-layer is-out"
-                  style={css({ "--line-accent": dishes[prev].accent })}
-                  aria-hidden
-                >
-                  <span className="mask">
-                    <span className="line">{dishes[prev].name[0]}</span>
-                  </span>
-                  <span className="mask">
-                    <span className="line accent">{dishes[prev].name[1]}</span>
-                  </span>
-                </span>
-              )}
+          <h2 className="title" aria-label={fullName}>
+            {prev !== null && prev !== active && (
               <span
-                key={`in-${active}`}
-                className="title-layer is-in"
-                style={css({ "--line-accent": dish.accent })}
+                key={`out-${prev}`}
+                className="title-layer is-out"
+                style={css({ "--line-accent": dishes[prev].accent })}
                 aria-hidden
               >
                 <span className="mask">
-                  <span className="line">{dish.name[0]}</span>
+                  <span className="line">{dishes[prev].name[0]}</span>
                 </span>
                 <span className="mask">
-                  <span className="line accent">{dish.name[1]}</span>
+                  <span className="line accent">{dishes[prev].name[1]}</span>
                 </span>
               </span>
-            </h2>
+            )}
+            <span
+              key={`in-${active}-${ready}`}
+              className="title-layer is-in"
+              style={css({ "--line-accent": dish.accent })}
+              aria-hidden
+            >
+              <span className="mask">
+                <span className="line">{dish.name[0]}</span>
+              </span>
+              <span className="mask">
+                <span className="line accent">{dish.name[1]}</span>
+              </span>
+            </span>
+          </h2>
 
-            <div className="browse" inert={open}>
-              <p
-                key={`line-${active}`}
-                className="lede fade-up mt-4 wide:mt-5"
-                style={css({ "--d": "0.12s" })}
-              >
-                {dish.line}
-              </p>
-              <div
-                className="fade-up mt-5 flex items-center gap-4 wide:mt-6"
-                style={css({ "--d": "0.2s" })}
-              >
-                <span key={`price-${active}`} className="price fade-up">
-                  €{dish.price}
-                </span>
-                <button
-                  type="button"
-                  className="pill"
-                  onClick={(ev) => openDish(ev.currentTarget)}
-                >
-                  View the dish <Arrow />
-                </button>
-              </div>
-              <div
-                className="fade-up mt-5 flex items-center gap-2 wide:mt-7"
-                style={css({ "--d": "0.28s" })}
-              >
-                <button
-                  type="button"
-                  className="round"
-                  aria-label="Previous dish"
-                  onClick={() => step(-1)}
-                >
-                  <Arrow flip />
-                </button>
-                <div
-                  className="flex items-center px-1"
-                  role="group"
-                  aria-label="Choose a dish"
-                >
-                  {dishes.map((d, i) => (
-                    <button
-                      key={d.id}
-                      type="button"
-                      className="tick"
-                      // the arrows either side (and the arrow keys) already do this from a keyboard
-                      tabIndex={-1}
-                      aria-label={`${d.name[0]} ${d.name[1]}`}
-                      aria-current={i === active ? "true" : undefined}
-                      onClick={() => goTo(i)}
-                    />
-                  ))}
-                </div>
-                <button
-                  type="button"
-                  className="round"
-                  aria-label="Next dish"
-                  onClick={() => step(1)}
-                >
-                  <Arrow />
-                </button>
-              </div>
+          <div className="browse" inert={open}>
+            {/* every sentence in one grid cell: the copy is always as tall as the longest */}
+            <div ref={ledeRef} className="lede-stack mt-4 wide:mt-5">
+              {dishes.map((d, i) =>
+                i === active ? (
+                  <p
+                    key={`line-${active}-${ready}`}
+                    className="lede fade-up"
+                    style={css({ "--d": "0.12s" })}
+                  >
+                    {d.line}
+                  </p>
+                ) : (
+                  <p key={d.id} className="lede" data-off aria-hidden>
+                    {d.line}
+                  </p>
+                ),
+              )}
             </div>
-          </>
-        )}
+            <div
+              key={`row-${ready}`}
+              className="fade-up mt-5 flex flex-wrap items-center gap-x-4 gap-y-3 wide:mt-6"
+              style={css({ "--d": "0.2s" })}
+            >
+              <span key={`price-${active}`} className="price fade-up">
+                €{dish.price}
+              </span>
+              <button
+                type="button"
+                className="pill"
+                onClick={(ev) => openDish(ev.currentTarget)}
+              >
+                View the dish <Arrow />
+              </button>
+            </div>
+            <div
+              key={`controls-${ready}`}
+              className="fade-up mt-5 flex items-center gap-2 wide:mt-7"
+              style={css({ "--d": "0.28s" })}
+            >
+              <button
+                type="button"
+                className="round"
+                aria-label="Previous dish"
+                onClick={() => step(-1)}
+              >
+                <Arrow flip />
+              </button>
+              <div
+                className="flex min-w-0 items-center px-1"
+                role="group"
+                aria-label="Choose a dish"
+              >
+                {dishes.map((d, i) => (
+                  <button
+                    key={d.id}
+                    type="button"
+                    className="tick"
+                    // the arrows either side (and the arrow keys) already do this from a keyboard
+                    tabIndex={-1}
+                    aria-label={`${d.name[0]} ${d.name[1]}`}
+                    aria-current={i === active ? "true" : undefined}
+                    onClick={() => goTo(i)}
+                  />
+                ))}
+              </div>
+              <button
+                type="button"
+                className="round"
+                aria-label="Next dish"
+                onClick={() => step(1)}
+              >
+                <Arrow />
+              </button>
+            </div>
+          </div>
+        </>
       </div>
 
       {/* ---------- details ---------- */}
@@ -1387,7 +1453,7 @@ export default function Hero() {
           </div>
           <button
             type="button"
-            className="pill min-w-0 flex-1 wide:flex-none"
+            className="pill grow wide:grow-0"
             data-done={added}
             onClick={addToOrder}
           >
