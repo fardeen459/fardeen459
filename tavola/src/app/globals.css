@@ -986,7 +986,7 @@ button {
   }
   .all-dishes,
   .dish-list,
-  .dish-list-backdrop {
+  .focus {
     display: none;
   }
   @keyframes fadeIn {
@@ -999,21 +999,34 @@ button {
      Phones (under 768 px). Nothing in this block applies from 768 px up,
      so tablets and laptops are untouched.
 
+     Built to stay inside a phone's graphics memory, which is what ran out
+     before (plates and the linen dropping out, a blank list):
+     - nothing on the table ever changes size: the camera only slides, and
+       an open dish is a small separate group lifted onto the cloth;
+     - the cloth is one fixed layer, painted once;
+     - steady colours (espresso floor, neutral linen), so nothing is
+       repainted when the dish changes;
+     - lighter pictures (Hero.tsx) and fewer layers.
+
      One screen (100dvh): the table takes the room the text leaves under
-     the nav, so the header, the whole table, the dish and its buttons are
-     all visible without scrolling. The text sits under the table, never
-     over the food. Opening a dish swaps the text for the dish's details,
-     which scroll on their own above the order bar. Everything that moves
-     animates transform or opacity only, in 300 ms or less.
+     the nav; the text sits under the table, never over the food.
+     Everything that moves animates transform or opacity only.
      ================================================================ */
   @media (max-width: 767.98px) {
     .hero {
+      --floor: #1f120d !important;
+      --tint: #e9dfd2 !important;
       height: 100dvh;
       min-height: 0;
       overflow: hidden;
       display: flex;
       flex-direction: column;
       justify-content: space-between;
+      background-color: #1f120d;
+    }
+    /* the floor colour no longer changes, so it needs no layer of its own */
+    .floor {
+      display: none;
     }
     .stage {
       position: relative;
@@ -1022,11 +1035,8 @@ button {
       min-height: 0;
       overflow: hidden;
     }
-    /* Where the table area meets the text below, the cloth fades into the
-       floor instead of being cut by a hard straight edge (that edge is what
-       looked like a dark box behind the garnishes of an open dish). A plain
-       floor-coloured layer shaped by a fixed mask, so its colour can follow
-       the floor's. */
+    /* where the table area meets the text, the cloth fades into the floor
+       instead of being cut by a hard straight edge */
     .stage::after {
       content: "";
       position: absolute;
@@ -1036,54 +1046,136 @@ button {
       height: 2.75rem;
       z-index: 1;
       pointer-events: none;
-      background-color: var(--floor);
-      transition: background-color 0.3s ease;
-      -webkit-mask-image: linear-gradient(to top, #000, transparent);
-      mask-image: linear-gradient(to top, #000, transparent);
+      background: linear-gradient(to top, #1f120d, rgb(31 18 13 / 0));
     }
 
-    /* The cloth stays still on a phone (only the ring of plates turns), so
-       its pieces share one layer, clipped round by their parent. The tint is
-       a plain colour layer (no radius of its own), so a dish's colour can
-       change without repainting the cloth. */
+    /* The cloth: one fixed layer, painted once, clipped round. It never
+       turns on a phone (only the ring of plates does), never changes size
+       and never changes colour. */
+    .cloth {
+      border-radius: 50%;
+      overflow: hidden;
+      transform: translateZ(0);
+      backface-visibility: hidden;
+    }
     .table,
+    .cloth-tint,
     .cloth-light,
     .loose,
     .loose-shadows,
     .cloth-lettering {
       will-change: auto;
     }
-    .cloth {
-      border-radius: 50%;
-      overflow: hidden;
-    }
     .cloth-tint {
       border-radius: 0;
-      transition-duration: 0.3s;
+      transition: none;
     }
-    .floor {
-      transition-duration: 0.3s;
+    /* the lettering and loose ingredients stay put when a dish opens: the
+       lifted plate covers the middle of the cloth anyway */
+    .hero[data-open="true"] :is(.cloth-lettering, .loose) {
+      opacity: 1;
     }
+    .vignette,
+    .burst,
     .scrim {
       display: none;
     }
 
-    /* opening a dish: short, compositor-only */
+    /* ---- the ring of plates when a dish opens ---- */
     .plate,
-    .plate-shadow,
-    .cloth-lettering,
-    .loose {
-      transition-duration: 0.28s;
+    .plate-shadow {
+      transition: opacity 0.28s ease;
     }
-    .burst-item {
+    /* the front plate hands over to its lifted copy, and takes over again
+       once the copy has settled back on the ring */
+    .plate[data-front="true"],
+    .plate-shadow[data-front="true"] {
+      transition: opacity 0.1s linear 0.24s;
+    }
+    .hero[data-open="true"] :is(.plate, .plate-shadow)[data-front="true"] {
+      opacity: 0;
+      transition: opacity 0.1s linear 0.04s;
+    }
+
+    /* ---- the open dish, lifted onto the middle of the cloth ----
+       Sizes are in table units (the cloth is 2000 across); the group starts
+       exactly over the front plate and grows to the centre. */
+    .focus {
+      display: block;
+      position: absolute;
+      left: 0;
+      top: 0;
+      width: 0;
+      height: 0;
+      pointer-events: none;
+      visibility: hidden;
+      transition: visibility 0s linear 0.36s;
+    }
+    .hero[data-open="true"] .focus {
+      visibility: visible;
+      transition: none;
+    }
+    .focus-dish {
+      position: absolute;
+      left: -560px;
+      top: -560px;
+      width: 1120px;
+      height: 1120px;
+      opacity: 0;
+      transform: translate(0, -700px) scale(0.5134);
+      will-change: transform, opacity;
+      transition:
+        transform 0.3s cubic-bezier(0.22, 1, 0.36, 1),
+        opacity 0.1s linear 0.26s;
+    }
+    .hero[data-open="true"] .focus-dish {
+      opacity: 1;
+      transform: none;
+      transition:
+        transform 0.3s cubic-bezier(0.22, 1, 0.36, 1),
+        opacity 0.08s linear;
+    }
+    .focus-plate {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      max-width: none;
+    }
+    .focus-shadow {
+      position: absolute;
+      inset: 0;
+      border-radius: 50%;
+      transform: translate(64px, 90px) scale(1.12);
+      background: radial-gradient(
+        closest-side,
+        rgb(34 18 10 / 0.55) 64%,
+        rgb(34 18 10 / 0.3) 82%,
+        rgb(34 18 10 / 0) 100%
+      );
+    }
+    .focus-garnish {
+      position: absolute;
+      left: calc(var(--gx) - 160px);
+      top: calc(var(--gy) - 160px);
+      width: 320px;
+      height: 320px;
+      max-width: none;
+      opacity: 0;
+      transform: translate(calc(var(--gx) * -0.45), calc(var(--gy) * -0.45))
+        rotate(var(--gr)) scale(0.4);
+      will-change: transform, opacity;
       transition:
         transform 0.2s ease-in,
-        opacity 0.15s ease;
+        opacity 0.12s linear;
     }
-    .hero[data-open="true"] .burst-item {
+    .hero[data-open="true"] .focus-garnish {
+      opacity: 1;
+      transform: rotate(var(--gr));
       transition:
-        transform 0.3s cubic-bezier(0.22, 1, 0.36, 1) calc(var(--i) * 0.03s),
-        opacity 0.2s ease calc(var(--i) * 0.03s);
+        transform 0.3s cubic-bezier(0.22, 1, 0.36, 1)
+          calc(0.08s + var(--i) * 0.03s),
+        opacity 0.16s linear calc(0.08s + var(--i) * 0.03s);
     }
 
     /* ---- the text under the table ---- */
@@ -1099,7 +1191,6 @@ button {
     .hero[data-open="true"] .copy {
       display: none;
     }
-
     /* The name swaps in place with a quick fade: no masks, no sliding, so it
        is never cut in half while the table turns. Only the active dish's
        name is ever rendered (Hero.tsx). */
@@ -1118,9 +1209,8 @@ button {
       animation: fadeIn 120ms ease-out backwards;
       animation-delay: 0s;
     }
-
-    /* arrows either side of a button that opens every dish in a list (the
-       dots between the arrows are hidden on phones in Hero.tsx) */
+    /* arrows either side of a button that opens every dish (the dots
+       between the arrows are hidden on phones in Hero.tsx) */
     .all-dishes {
       display: inline-flex;
       align-items: center;
@@ -1137,9 +1227,6 @@ button {
       letter-spacing: 0.2em;
       text-transform: uppercase;
       white-space: nowrap;
-      transition:
-        background-color 0.2s ease,
-        color 0.2s ease;
     }
     .all-dishes:active {
       background: var(--color-cream);
@@ -1195,48 +1282,27 @@ button {
       flex-wrap: wrap;
       margin: 0;
       padding: 0.75rem var(--gutter) max(1rem, env(safe-area-inset-bottom));
-      background: var(--floor);
+      background: #1f120d;
       box-shadow: 0 -1px 0 var(--line);
     }
 
-    /* ---- every dish in one list, sliding up from the bottom ---- */
-    .dish-list-backdrop {
-      display: block;
-      position: fixed;
-      inset: 0;
-      z-index: 40;
-      background: rgb(8 5 3 / 0.55);
-      opacity: 0;
-      visibility: hidden;
-      transition:
-        opacity 0.28s cubic-bezier(0.22, 1, 0.36, 1),
-        visibility 0s linear 0.28s;
-    }
+    /* ---- every dish, on its own full screen ---- */
     .dish-list {
       display: block;
       position: fixed;
-      left: 0;
-      right: 0;
-      bottom: 0;
-      z-index: 41;
-      max-height: min(88dvh, 40rem);
+      inset: 0;
+      z-index: 50;
       overflow-y: auto;
       overscroll-behavior: contain;
-      padding: 0.4rem var(--gutter) max(1rem, env(safe-area-inset-bottom));
-      border-radius: 1.25rem 1.25rem 0 0;
-      background: color-mix(in srgb, var(--floor) 88%, #f5ede1);
-      box-shadow: 0 -1.25rem 2.5rem rgb(0 0 0 / 0.45);
-      transform: translateY(105%);
+      padding: 0 var(--gutter) max(1.5rem, env(safe-area-inset-bottom));
+      background: #1f120d;
+      color: var(--color-cream);
+      transform: translateY(100%);
       visibility: hidden;
       will-change: transform;
       transition:
         transform 0.28s cubic-bezier(0.22, 1, 0.36, 1),
         visibility 0s linear 0.28s;
-    }
-    .hero[data-list="true"] .dish-list-backdrop {
-      opacity: 1;
-      visibility: visible;
-      transition: opacity 0.28s cubic-bezier(0.22, 1, 0.36, 1);
     }
     .hero[data-list="true"] .dish-list {
       transform: none;
@@ -1244,47 +1310,84 @@ button {
       transition: transform 0.28s cubic-bezier(0.22, 1, 0.36, 1);
     }
     .dish-list-head {
+      position: sticky;
+      top: 0;
+      z-index: 1;
       display: flex;
-      align-items: center;
+      align-items: flex-start;
       justify-content: space-between;
-      padding: 0.8rem 0 0.7rem;
+      gap: 1rem;
+      padding: max(1.1rem, env(safe-area-inset-top)) 0 0.9rem;
+      background: #1f120d;
+      border-bottom: 1px solid var(--line);
     }
-    .dish-list ol {
-      border-top: 1px solid var(--line);
+    .dish-list-title {
+      font-family: var(--font-serif);
+      font-size: 1.9rem;
+      font-weight: 360;
+      line-height: 1.05;
+      letter-spacing: -0.02em;
+    }
+    .dish-list-close {
+      display: grid;
+      place-items: center;
+      flex: none;
+      width: 2.75rem;
+      height: 2.75rem;
+      border-radius: 50%;
+      border: 1px solid rgb(245 237 225 / 0.32);
+      color: var(--color-cream);
+      font-size: 1.05rem;
+      line-height: 1;
     }
     .dish-row {
       display: grid;
-      grid-template-columns: 2rem 1fr;
-      column-gap: 0.25rem;
-      row-gap: 0.15rem;
+      grid-template-columns: 2rem 1fr auto;
+      column-gap: 0.6rem;
+      align-items: start;
       width: 100%;
-      padding: 0.6rem 0;
+      padding: 0.95rem 0;
       border-bottom: 1px solid var(--line);
       text-align: left;
     }
     .dish-row-num {
-      grid-row: span 2;
-      padding-top: 0.3rem;
-      font-size: 0.66rem;
-      letter-spacing: 0.2em;
-      color: rgb(245 237 225 / 0.45);
+      padding-top: 0.1rem;
+      font-size: 0.7rem;
+      letter-spacing: 0.16em;
+      color: rgb(245 237 225 / 0.5);
       font-variant-numeric: tabular-nums;
+    }
+    .dish-row-text {
+      display: grid;
+      gap: 0.3rem;
+      min-width: 0;
+    }
+    .dish-row-course {
+      font-size: 0.6rem;
+      font-weight: 600;
+      letter-spacing: 0.22em;
+      text-transform: uppercase;
+      color: rgb(245 237 225 / 0.6);
     }
     .dish-row-name {
       font-family: var(--font-serif);
-      font-size: 1.12rem;
+      font-size: 1.3rem;
       font-weight: 360;
-      line-height: 1.2;
+      line-height: 1.15;
     }
     .dish-row-name em {
       font-weight: 340;
     }
-    .dish-row-meta {
-      font-size: 0.62rem;
-      font-weight: 500;
-      letter-spacing: 0.2em;
-      text-transform: uppercase;
-      color: var(--muted);
+    .dish-row-line {
+      font-size: 0.86rem;
+      line-height: 1.45;
+      color: rgb(245 237 225 / 0.78);
+    }
+    .dish-row-price {
+      padding-top: 1.05rem;
+      font-family: var(--font-serif);
+      font-size: 1.15rem;
+      font-variant-numeric: tabular-nums;
     }
     .dish-row[aria-current="true"] .dish-row-num {
       color: var(--accent);

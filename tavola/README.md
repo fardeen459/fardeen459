@@ -25,14 +25,15 @@ Needs Node.js 20.9 or newer.
   shows what is on the plate, allergens, a wine and the order controls.
 - **Close it:** the back link, Escape, the plate, or the empty table.
 - **On a phone** (under 768 px) everything fits one screen (`100dvh`): the
-  whole table (up to `min(88vw, 420px)`, smaller if the screen is short) with
-  all eight plates in view, and under it the dish, its price, "View the dish",
-  the arrows and an **All dishes (08)** button that lists every dish. The cloth
-  stays still while the ring of plates turns, and names swap with a quick
-  fade. Opening a dish glides the camera in 300 ms (compositor only), pauses
-  the animation loop, and shows the details at once in their own scrolling
-  area above the order bar. From 768 px up (tablets, laptops) the layout is
-  the one described above.
+  whole table with all eight plates in view, and under it the dish, its price,
+  "View the dish", the arrows and an **All dishes (08)** button that opens a
+  full-screen menu of every dish. The phone version is built to stay inside a
+  phone's graphics memory: nothing on the table ever changes size (the camera
+  only slides; an open dish is lifted onto the middle of the cloth as a small
+  separate group), the cloth is one fixed layer that never turns, the floor
+  and cloth colours stay the same for every dish, and pictures are lighter
+  (400 px plates, 256 px ingredients). From 768 px up (tablets, laptops) the
+  layout is the one described above.
 
 ## Changing the content
 

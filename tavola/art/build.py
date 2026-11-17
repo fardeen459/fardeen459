@@ -119,8 +119,12 @@ def main():
         base = os.path.join(args.out or os.path.join(PUBLIC, sub), name)
         print("wrote", save(arr, base + ext), f"{time.time() - t0:.1f}s", flush=True)
         if kind == "dish" and not args.out:
-            # phones load a lighter copy
+            # lighter copies: 800 px for upright tablets and a phone's open dish, 400 px for a phone's table
             save(arr, os.path.join(PUBLIC, "dishes", "sm", name + ext), size=800)
+            save(arr, os.path.join(PUBLIC, "dishes", "xs", name + ext), size=400)
+        if kind == "ing" and not args.out:
+            # phones: 256 px is plenty for an ingredient on a phone-sized table
+            save(arr, os.path.join(PUBLIC, "ingredients", "sm", name + ext), size=256)
         if kind == "ing":
             # a blurred silhouette: small is plenty, and cheap to decode
             save(shadow_of(arr), base + "-shadow" + ext, quality=80, size=160)

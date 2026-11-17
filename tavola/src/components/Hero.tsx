@@ -41,6 +41,18 @@ const MOBILE_QUERY = "(max-width: 767.98px)";
 /** phones: opening and closing a dish is one short compositor transition */
 const CAM_MS = 300;
 const CAM_EASE = "cubic-bezier(0.22, 1, 0.36, 1)";
+/** phones: where the four garnishes of an open dish sit round the big plate (table units) */
+const FOCUS_SPOTS = [
+  { x: -520, y: -500, rotate: -18 },
+  { x: 520, y: -520, rotate: 24 },
+  { x: 540, y: 500, rotate: -30 },
+  { x: -530, y: 510, rotate: 12 },
+];
+
+/** phones load lighter pictures: 400 px plates and 256 px ingredients */
+const phonePlate = (src: string) => src.replace("/dishes/", "/dishes/xs/");
+const phoneIngredient = (src: string) =>
+  src.replace("/ingredients/", "/ingredients/sm/");
 const onPhone = () =>
   typeof window !== "undefined" && window.matchMedia(MOBILE_QUERY).matches;
 const subscribeMobile = (onChange: () => void) => {
@@ -96,17 +108,17 @@ function computeLayout(
 ): Layout {
   const dia = PLATE * (1 + BOOST);
   if (slot && !wide) {
-    // Phone: the whole table fits its slot under the nav, so every plate on
-    // the ring stays in view (the ring is 35% of the table's width).
-    const sB = slot.d / SIZE;
-    // Open: the front plate and its four fly-out ingredients fill the slot.
-    const sD = slot.d / 960;
+    // Phone: the camera never changes its scale. The table keeps one size in
+    // every view (only its position moves), so the phone paints the cloth and
+    // the plates once. Re-painting them at a zoomed-in size is what ran the
+    // phone out of graphics memory and made plates and the linen drop out.
+    const view = { x: slot.x, y: slot.y, s: slot.d / SIZE };
     return {
       wide: false,
       front: 0,
-      overview: { x: slot.x, y: slot.y, s: sB * 0.8 },
-      browse: { x: slot.x, y: slot.y, s: sB },
-      detail: { x: slot.x, y: slot.y + RING * sD, s: sD },
+      overview: view,
+      browse: { ...view },
+      detail: { ...view },
     };
   }
   if (wide) {
@@ -212,6 +224,8 @@ type Engine = {
   asleep: boolean;
   wake: () => void;
   camTimer: number;
+  /** phones: the table's diameter in px, set in the table view and kept while a dish is open */
+  phoneD: number;
 };
 
 const ZERO: Cam = { x: 0, y: 0, s: 1 };
@@ -247,6 +261,7 @@ function createEngine(): Engine {
     asleep: false,
     wake: () => {},
     camTimer: 0,
+    phoneD: 0,
   };
 }
 
@@ -395,14 +410,19 @@ const LooseScene = memo(function LooseScene({
         ))}
       </div>
       {placed.map((p) => (
-        <img
-          key={p.id}
-          data-wait
-          src={asset(p.g.file)}
-          alt=""
-          draggable={false}
-          style={p.style}
-        />
+        <picture key={p.id}>
+          <source
+            media={MOBILE_QUERY}
+            srcSet={asset(phoneIngredient(p.g.file))}
+          />
+          <img
+            data-wait
+            src={asset(p.g.file)}
+            alt=""
+            draggable={false}
+            style={p.style}
+          />
+        </picture>
       ))}
     </div>
   );
@@ -591,9 +611,13 @@ export default function Hero() {
         const nav = navRef.current;
         const top = nav ? nav.offsetTop + nav.offsetHeight : 76;
         const room = box.height - top;
-        // 88% of the width, at most 420 px, and never taller than the room
-        const d = Math.max(96, Math.min(box.width * 0.88, 420, room - 18));
-        slot = { x: box.width / 2, y: top + room / 2, d };
+        // 88% of the width, at most 420 px, and never taller than the table
+        // view's room. While a dish is open the stage is shorter, but the table
+        // keeps its size (it only slides up), so nothing is painted again.
+        if (e.view !== "detail" || !e.phoneD) {
+          e.phoneD = Math.max(96, Math.min(box.width * 0.88, 420, room - 18));
+        }
+        slot = { x: box.width / 2, y: top + room / 2, d: e.phoneD };
       }
       e.layout = computeLayout(box.width, box.height, wideQuery.matches, slot);
       e.to = e.layout[e.view];
@@ -1183,7 +1207,7 @@ export default function Hero() {
       </p>
 
       {/* ---------- nav ---------- */}
-      <header ref={navRef} className="hero-nav">
+      <header ref={navRef} className="hero-nav" inert={listOpen}>
         <a
           href="#menu"
           className="block flex-1 leading-none"
@@ -1284,6 +1308,7 @@ export default function Hero() {
       <div
         ref={stageRef}
         className="stage"
+        inert={listOpen}
         onPointerDown={onPointerDown}
         onPointerMove={onPointerMove}
         onPointerUp={endDrag}
@@ -1385,6 +1410,10 @@ export default function Hero() {
                     >
                       {/* phones get a lighter 800 px plate; laptops and tablets the full 1200 px */}
                       <picture>
+                        <source
+                          media={MOBILE_QUERY}
+                          srcSet={asset(phonePlate(d.image))}
+                        />
                         <source media={WIDE_QUERY} srcSet={asset(d.image)} />
                         <img
                           data-wait
@@ -1404,6 +1433,39 @@ export default function Hero() {
             </div>
           </div>
           <div className="vignette" />
+          {/* phones: the open dish lifts off the ring onto the middle of the
+              cloth with its garnishes. Only this small group changes size,
+              so the cloth and the other plates never have to be repainted. */}
+          <div className="focus" aria-hidden>
+            <div className="focus-dish">
+              <div className="focus-shadow" />
+              <img
+                className="focus-plate"
+                src={asset(dish.image.replace("/dishes/", "/dishes/sm/"))}
+                alt=""
+                draggable={false}
+              />
+            </div>
+            {dish.ingredients.map((key, i) => {
+              const g = ingredients[key];
+              const spot = FOCUS_SPOTS[i];
+              return (
+                <img
+                  key={`${dish.id}-${key}`}
+                  className="focus-garnish"
+                  src={asset(phoneIngredient(g.file))}
+                  alt=""
+                  draggable={false}
+                  style={css({
+                    "--gx": `${spot.x}px`,
+                    "--gy": `${spot.y}px`,
+                    "--gr": `${spot.rotate}deg`,
+                    "--i": i,
+                  })}
+                />
+              );
+            })}
+          </div>
         </div>
       </div>
 
@@ -1412,6 +1474,7 @@ export default function Hero() {
       {/* ---------- copy ---------- */}
       <div
         className="copy"
+        inert={listOpen}
         onPointerEnter={(ev) => ev.pointerType === "mouse" && hold(true)}
         onPointerLeave={() => hold(false)}
         onFocus={(ev) => ev.target.matches(":focus-visible") && hold(true)}
@@ -1637,28 +1700,32 @@ export default function Hero() {
           </button>
         </div>
       </div>
-      {/* ---------- phones: every dish in one list ---------- */}
-      <div
-        className="dish-list-backdrop"
-        aria-hidden
-        onClick={() => setListOpen(false)}
-      />
+      {/* ---------- phones: every dish, full screen ---------- */}
       <div
         ref={listRef}
         id="dish-list"
         className="dish-list"
         role="dialog"
-        aria-label="All dishes"
+        aria-modal="true"
+        aria-labelledby="dish-list-title"
         inert={!listOpen}
       >
         <div className="dish-list-head">
-          <p className="label">The menu · {pad(N)} dishes</p>
+          <div>
+            <h2 id="dish-list-title" className="dish-list-title">
+              The menu
+            </h2>
+            <p className="label mt-1">
+              {pad(N)} dishes · tap one to bring it to the front
+            </p>
+          </div>
           <button
             type="button"
-            className="back"
+            className="dish-list-close"
+            aria-label="Close the menu"
             onClick={() => setListOpen(false)}
           >
-            Close
+            ✕
           </button>
         </div>
         <ol>
@@ -1671,12 +1738,14 @@ export default function Hero() {
                 onClick={() => pickDish(i)}
               >
                 <span className="dish-row-num">{pad(i + 1)}</span>
-                <span className="dish-row-name">
-                  {d.name[0]} <em style={{ color: d.accent }}>{d.name[1]}</em>
+                <span className="dish-row-text">
+                  <span className="dish-row-course">{d.course}</span>
+                  <span className="dish-row-name">
+                    {d.name[0]} <em style={{ color: d.accent }}>{d.name[1]}</em>
+                  </span>
+                  <span className="dish-row-line">{d.line}</span>
                 </span>
-                <span className="dish-row-meta">
-                  {d.course} · €{d.price}
-                </span>
+                <span className="dish-row-price">€{d.price}</span>
               </button>
             </li>
           ))}
