@@ -7,7 +7,8 @@
 @custom-variant wide (@media (min-width: 860px) and (min-aspect-ratio: 21/20));
 
 @theme inline {
-  --font-serif: var(--font-fraunces), "Iowan Old Style", "Palatino Linotype", Georgia, serif;
+  --font-serif:
+    var(--font-fraunces), "Iowan Old Style", "Palatino Linotype", Georgia, serif;
   --font-sans: var(--font-dm-sans), ui-sans-serif, system-ui, sans-serif;
   --color-cream: #f5ede1;
   --color-ink: #17110e;
@@ -73,9 +74,21 @@ button {
     z-index: 0;
     pointer-events: none;
     background:
-      radial-gradient(120% 95% at 68% 58%, transparent 38%, rgb(0 0 0 / 0.4) 100%),
-      repeating-linear-gradient(90deg, rgb(255 255 255 / 0.028) 0 1px, transparent 1px 7.5rem),
-      repeating-linear-gradient(90deg, rgb(0 0 0 / 0.06) 0 2.6rem, transparent 2.6rem 7.5rem);
+      radial-gradient(
+        120% 95% at 68% 58%,
+        transparent 38%,
+        rgb(0 0 0 / 0.4) 100%
+      ),
+      repeating-linear-gradient(
+        90deg,
+        rgb(255 255 255 / 0.028) 0 1px,
+        transparent 1px 7.5rem
+      ),
+      repeating-linear-gradient(
+        90deg,
+        rgb(0 0 0 / 0.06) 0 2.6rem,
+        transparent 2.6rem 7.5rem
+      );
   }
 
   .hero :is(a, button):focus-visible {
@@ -127,7 +140,12 @@ button {
     border-radius: 50%;
     pointer-events: none;
     transform: translate(36px, 62px) scale(1.07);
-    background: radial-gradient(closest-side, rgb(0 0 0 / 0.6) 84%, rgb(0 0 0 / 0.26) 92%, transparent 100%);
+    background: radial-gradient(
+      closest-side,
+      rgb(0 0 0 / 0.6) 84%,
+      rgb(0 0 0 / 0.26) 92%,
+      transparent 100%
+    );
   }
 
   .table {
@@ -183,9 +201,12 @@ button {
     height: 2000px;
     border-radius: 50%;
     pointer-events: none;
-    background: radial-gradient(closest-side, transparent 90%, rgb(50 30 20 / 0.28) 100%);
+    background: radial-gradient(
+      closest-side,
+      transparent 90%,
+      rgb(50 30 20 / 0.28) 100%
+    );
   }
-
 
   .cloth-lettering {
     position: absolute;
@@ -271,7 +292,11 @@ button {
     will-change: transform;
     pointer-events: none;
     background:
-      radial-gradient(78% 78% at 24% 20%, rgb(255 248 236 / 0.3), transparent 64%),
+      radial-gradient(
+        78% 78% at 24% 20%,
+        rgb(255 248 236 / 0.3),
+        transparent 64%
+      ),
       radial-gradient(88% 88% at 80% 86%, rgb(40 22 12 / 0.36), transparent 66%);
   }
 
@@ -385,7 +410,8 @@ button {
     transform: translate(var(--x), var(--y)) rotate(var(--r)) scale(1);
     /* the curve runs past 1 before it settles: that is the overshoot */
     transition:
-      transform 1s cubic-bezier(0.3, 1.55, 0.45, 1) calc(0.3s + var(--i) * 0.075s),
+      transform 1s cubic-bezier(0.3, 1.55, 0.45, 1)
+        calc(0.3s + var(--i) * 0.075s),
       opacity 0.3s ease calc(0.3s + var(--i) * 0.075s);
   }
   .burst-item img {
@@ -446,7 +472,12 @@ button {
   }
   @variant wide {
     .scrim {
-      --scrim-shape: linear-gradient(to right, #000 0%, rgb(0 0 0 / 0.9) 21%, transparent 46%);
+      --scrim-shape: linear-gradient(
+        to right,
+        #000 0%,
+        rgb(0 0 0 / 0.9) 21%,
+        transparent 46%
+      );
     }
   }
 
@@ -885,7 +916,8 @@ button {
 
   @variant wide {
     .detail {
-      inset: calc(var(--copy-top) + 1.56rem + var(--title) * 2.08 + 1.35rem) auto auto var(--gutter);
+      inset: calc(var(--copy-top) + 1.56rem + var(--title) * 2.08 + 1.35rem)
+        auto auto var(--gutter);
       width: min(25rem, 29vw);
       height: auto;
       padding: 0;
@@ -941,64 +973,80 @@ button {
   }
   @media (min-width: 860px) and (min-aspect-ratio: 21/20) and (max-height: 620px) {
     /* the sentence is already known from the table view */
-    .detail > .lede {
+    .detail-body > .lede {
       display: none;
     }
   }
 
-  /* only used on a phone (see below) */
-  .table-slot {
+  /* Phone-only pieces. From 768 px up they generate no box at all:
+     .detail-body is display: contents, so the detail panel lays out
+     exactly as before. */
+  .detail-body {
+    display: contents;
+  }
+  .all-dishes,
+  .dish-list,
+  .dish-list-backdrop {
     display: none;
+  }
+  @keyframes fadeIn {
+    from {
+      opacity: 0;
+    }
   }
 
   /* ================================================================
      Phones (under 768 px). Nothing in this block applies from 768 px up,
      so tablets and laptops are untouched.
 
-     The whole table fits the screen's width with every plate in view, the
-     copy sits below it in normal flow (it can never cover the food), and
-     an open dish shows its details there too, as ordinary page content.
-     Keeping the table this small is also what keeps the phone inside its
-     graphics memory: the old layout drew it ~2.5x wider than the screen,
-     and when memory ran out Chrome left parts of layers unpainted (the cut
-     linen patch, vanishing plates, a blank detail panel).
+     One screen (100dvh): the table takes the room the text leaves under
+     the nav, so the header, the whole table, the dish and its buttons are
+     all visible without scrolling. The text sits under the table, never
+     over the food. Opening a dish swaps the text for the dish's details,
+     which scroll on their own above the order bar. Everything that moves
+     animates transform or opacity only, in 300 ms or less.
      ================================================================ */
   @media (max-width: 767.98px) {
     .hero {
-      /* the table's diameter: 88% of the width, at most 420 px, and short
-         enough that a phone held sideways still shows all of it */
-      --table-d: min(88vw, 420px, calc(100svh - 8rem));
-      --nav-space: calc(4.75rem + env(safe-area-inset-top, 0px));
-      height: auto;
-      min-height: 100dvh;
-      /* clip, not hidden: hidden would make the hero a scroll box and stop
-         the order bar from sticking to the bottom of the screen */
-      overflow: clip;
+      height: 100dvh;
+      min-height: 0;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
     }
-
-    /* the table's own band under the nav; it clips the zoom when a dish opens */
     .stage {
       position: relative;
       inset: auto;
-      height: calc(var(--nav-space) + var(--table-d) + 2rem);
+      flex: 1 1 auto;
+      min-height: 0;
       overflow: hidden;
     }
-    .table-slot {
-      display: block;
+    /* Where the table area meets the text below, the cloth fades into the
+       floor instead of being cut by a hard straight edge (that edge is what
+       looked like a dark box behind the garnishes of an open dish). A plain
+       floor-coloured layer shaped by a fixed mask, so its colour can follow
+       the floor's. */
+    .stage::after {
+      content: "";
       position: absolute;
-      left: 50%;
-      top: var(--nav-space);
-      width: var(--table-d);
-      height: var(--table-d);
-      margin-left: calc(var(--table-d) / -2);
-      visibility: hidden;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      height: 2.75rem;
+      z-index: 1;
       pointer-events: none;
+      background-color: var(--floor);
+      transition: background-color 0.3s ease;
+      -webkit-mask-image: linear-gradient(to top, #000, transparent);
+      mask-image: linear-gradient(to top, #000, transparent);
     }
 
     /* The cloth stays still on a phone (only the ring of plates turns), so
-       its pieces can share one layer, clipped round by their parent. */
+       its pieces share one layer, clipped round by their parent. The tint is
+       a plain colour layer (no radius of its own), so a dish's colour can
+       change without repainting the cloth. */
     .table,
-    .cloth-tint,
     .cloth-light,
     .loose,
     .loose-shadows,
@@ -1009,43 +1057,107 @@ button {
       border-radius: 50%;
       overflow: hidden;
     }
-    .cloth-tint,
-    .cloth-weave {
-      inset: 0;
-      width: 100%;
-      height: 100%;
+    .cloth-tint {
+      border-radius: 0;
+      transition-duration: 0.3s;
     }
-
-    /* the copy is on plain floor now, below the table */
+    .floor {
+      transition-duration: 0.3s;
+    }
     .scrim {
       display: none;
     }
+
+    /* opening a dish: short, compositor-only */
+    .plate,
+    .plate-shadow,
+    .cloth-lettering,
+    .loose {
+      transition-duration: 0.28s;
+    }
+    .burst-item {
+      transition:
+        transform 0.2s ease-in,
+        opacity 0.15s ease;
+    }
+    .hero[data-open="true"] .burst-item {
+      transition:
+        transform 0.3s cubic-bezier(0.22, 1, 0.36, 1) calc(var(--i) * 0.03s),
+        opacity 0.2s ease calc(var(--i) * 0.03s);
+    }
+
+    /* ---- the text under the table ---- */
     .copy {
       position: relative;
+      flex: none;
       z-index: 20;
       left: auto;
       right: auto;
       bottom: auto;
-      padding: 0.25rem var(--gutter) max(1.75rem, env(safe-area-inset-bottom));
+      padding: 0.25rem var(--gutter) max(1.1rem, env(safe-area-inset-bottom));
     }
     .hero[data-open="true"] .copy {
       display: none;
     }
-    /* only the active dish's name, ever (Hero.tsx also skips rendering it) */
+
+    /* The name swaps in place with a quick fade: no masks, no sliding, so it
+       is never cut in half while the table turns. Only the active dish's
+       name is ever rendered (Hero.tsx). */
     .title-layer.is-out {
       display: none;
     }
+    .mask {
+      overflow: visible;
+    }
+    .is-in .line,
+    .is-in .mask:nth-child(2) .line {
+      animation: fadeIn 120ms ease-out backwards;
+      animation-delay: 0s;
+    }
+    .copy .fade-up {
+      animation: fadeIn 120ms ease-out backwards;
+      animation-delay: 0s;
+    }
 
-    /* the open dish: ordinary content under the table, not an overlay */
+    /* arrows either side of a button that opens every dish in a list (the
+       dots between the arrows are hidden on phones in Hero.tsx) */
+    .all-dishes {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      flex: 1 1 auto;
+      min-width: 0;
+      height: 2.5rem;
+      padding: 0 1rem;
+      border-radius: 999px;
+      border: 1px solid rgb(245 237 225 / 0.32);
+      color: var(--color-cream);
+      font-size: 0.63rem;
+      font-weight: 700;
+      letter-spacing: 0.2em;
+      text-transform: uppercase;
+      white-space: nowrap;
+      transition:
+        background-color 0.2s ease,
+        color 0.2s ease;
+    }
+    .all-dishes:active {
+      background: var(--color-cream);
+      color: #1c1410;
+    }
+
+    /* ---- an open dish: its details replace the text, all at once ---- */
     .detail {
       display: none;
       position: relative;
       inset: auto;
       z-index: 20;
+      flex: 0 0 56%;
+      min-height: 0;
       width: auto;
       height: auto;
+      padding: 0;
       overflow: visible;
-      padding: 0.25rem var(--gutter) 0;
       border-radius: 0;
       background: none;
       box-shadow: none;
@@ -1055,20 +1167,130 @@ button {
       transition: none;
     }
     .hero[data-open="true"] .detail {
-      display: block;
+      display: flex;
+      flex-direction: column;
       visibility: visible;
       opacity: 1;
       transform: none;
       transition: none;
     }
+    .hero[data-open="true"] .detail .stagger {
+      animation: none;
+    }
     .detail-grip {
       display: none;
     }
-    /* stays at the bottom of the screen while the details scroll */
+    .detail-body {
+      display: block;
+      flex: 1 1 auto;
+      min-height: 0;
+      overflow-y: auto;
+      overscroll-behavior: contain;
+      padding: 0.5rem var(--gutter) 1.5rem;
+    }
+    /* under the scrolling details, never over them */
     .detail-bar {
-      margin-inline: calc(var(--gutter) * -1);
-      padding: 0.9rem var(--gutter) max(1.1rem, env(safe-area-inset-bottom));
+      position: relative;
+      flex: none;
+      flex-wrap: wrap;
+      margin: 0;
+      padding: 0.75rem var(--gutter) max(1rem, env(safe-area-inset-bottom));
       background: var(--floor);
+      box-shadow: 0 -1px 0 var(--line);
+    }
+
+    /* ---- every dish in one list, sliding up from the bottom ---- */
+    .dish-list-backdrop {
+      display: block;
+      position: fixed;
+      inset: 0;
+      z-index: 40;
+      background: rgb(8 5 3 / 0.55);
+      opacity: 0;
+      visibility: hidden;
+      transition:
+        opacity 0.28s cubic-bezier(0.22, 1, 0.36, 1),
+        visibility 0s linear 0.28s;
+    }
+    .dish-list {
+      display: block;
+      position: fixed;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      z-index: 41;
+      max-height: min(88dvh, 40rem);
+      overflow-y: auto;
+      overscroll-behavior: contain;
+      padding: 0.4rem var(--gutter) max(1rem, env(safe-area-inset-bottom));
+      border-radius: 1.25rem 1.25rem 0 0;
+      background: color-mix(in srgb, var(--floor) 88%, #f5ede1);
+      box-shadow: 0 -1.25rem 2.5rem rgb(0 0 0 / 0.45);
+      transform: translateY(105%);
+      visibility: hidden;
+      will-change: transform;
+      transition:
+        transform 0.28s cubic-bezier(0.22, 1, 0.36, 1),
+        visibility 0s linear 0.28s;
+    }
+    .hero[data-list="true"] .dish-list-backdrop {
+      opacity: 1;
+      visibility: visible;
+      transition: opacity 0.28s cubic-bezier(0.22, 1, 0.36, 1);
+    }
+    .hero[data-list="true"] .dish-list {
+      transform: none;
+      visibility: visible;
+      transition: transform 0.28s cubic-bezier(0.22, 1, 0.36, 1);
+    }
+    .dish-list-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0.8rem 0 0.7rem;
+    }
+    .dish-list ol {
+      border-top: 1px solid var(--line);
+    }
+    .dish-row {
+      display: grid;
+      grid-template-columns: 2rem 1fr;
+      column-gap: 0.25rem;
+      row-gap: 0.15rem;
+      width: 100%;
+      padding: 0.6rem 0;
+      border-bottom: 1px solid var(--line);
+      text-align: left;
+    }
+    .dish-row-num {
+      grid-row: span 2;
+      padding-top: 0.3rem;
+      font-size: 0.66rem;
+      letter-spacing: 0.2em;
+      color: rgb(245 237 225 / 0.45);
+      font-variant-numeric: tabular-nums;
+    }
+    .dish-row-name {
+      font-family: var(--font-serif);
+      font-size: 1.12rem;
+      font-weight: 360;
+      line-height: 1.2;
+    }
+    .dish-row-name em {
+      font-weight: 340;
+    }
+    .dish-row-meta {
+      font-size: 0.62rem;
+      font-weight: 500;
+      letter-spacing: 0.2em;
+      text-transform: uppercase;
+      color: var(--muted);
+    }
+    .dish-row[aria-current="true"] .dish-row-num {
+      color: var(--accent);
+    }
+    .hero .dish-row:focus-visible {
+      outline-offset: -2px;
     }
   }
 }

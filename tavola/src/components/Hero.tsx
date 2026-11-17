@@ -38,6 +38,11 @@ const HALF = SIZE / 2;
 const WIDE_QUERY = "(min-width: 860px) and (min-aspect-ratio: 21/20)";
 /** phones: must match the `max-width: 767.98px` block in globals.css. 768 px and up is untouched. */
 const MOBILE_QUERY = "(max-width: 767.98px)";
+/** phones: opening and closing a dish is one short compositor transition */
+const CAM_MS = 300;
+const CAM_EASE = "cubic-bezier(0.22, 1, 0.36, 1)";
+const onPhone = () =>
+  typeof window !== "undefined" && window.matchMedia(MOBILE_QUERY).matches;
 const subscribeMobile = (onChange: () => void) => {
   const q = window.matchMedia(MOBILE_QUERY);
   q.addEventListener("change", onChange);
@@ -203,6 +208,10 @@ type Engine = {
   wheelFrom: number | null;
   wheelSum: number;
   wheelTimer: number;
+  /** phones: the loop stops while a dish is open and nothing moves; wake() restarts it */
+  asleep: boolean;
+  wake: () => void;
+  camTimer: number;
 };
 
 const ZERO: Cam = { x: 0, y: 0, s: 1 };
@@ -235,6 +244,9 @@ function createEngine(): Engine {
     wheelFrom: null,
     wheelSum: 0,
     wheelTimer: 0,
+    asleep: false,
+    wake: () => {},
+    camTimer: 0,
   };
 }
 
@@ -407,6 +419,8 @@ export default function Hero() {
   const [added, setAdded] = useState(false);
   const [order, setOrder] = useState<Record<string, number>>({});
   const [orderOpen, setOrderOpen] = useState(false);
+  // phones: the list of all eight dishes
+  const [listOpen, setListOpen] = useState(false);
   const [say, setSay] = useState("");
   // On a phone only one dish name is ever in the page: the outgoing one is
   // dropped at once instead of sliding out past the incoming one.
@@ -426,7 +440,9 @@ export default function Hero() {
   const shadowRefs = useRef<(HTMLDivElement | null)[]>([]);
   const plateShadowsRef = useRef<HTMLDivElement>(null);
   const ringRef = useRef<HTMLDivElement>(null);
-  const slotRef = useRef<HTMLDivElement>(null);
+  const navRef = useRef<HTMLElement>(null);
+  const listButtonRef = useRef<HTMLButtonElement>(null);
+  const listRef = useRef<HTMLDivElement>(null);
   const looseShadowsRef = useRef<HTMLDivElement>(null);
   const detailRef = useRef<HTMLDivElement>(null);
   const orderRef = useRef<HTMLDivElement>(null);
@@ -444,19 +460,46 @@ export default function Hero() {
 
   /* ---------------- camera ---------------- */
 
-  const moveCamera = useCallback((view: ViewName, seconds: number) => {
+  // Phones: the camera jumps to its new place in one write and the browser
+  // animates it (transform only, on the compositor). The browser then knows
+  // the zoom's end in advance and paints the cloth once, at its final size,
+  // instead of repainting it in pieces on every frame of a scripted zoom.
+  const glideCamera = useCallback(() => {
     const e = engineRef.current!;
-    e.view = view;
-    e.to = e.layout[view];
-    if (e.reduced || seconds <= 0) {
-      e.cam = { ...e.to };
-      e.camT = 1;
-      return;
-    }
-    e.from = { ...e.cam };
-    e.camT = 0;
-    e.camDur = seconds;
+    const world = worldRef.current;
+    if (!world) return;
+    world.style.transition = e.reduced
+      ? "none"
+      : `transform ${CAM_MS}ms ${CAM_EASE}, opacity 0.9s ease`;
+    window.clearTimeout(e.camTimer);
+    e.camTimer = window.setTimeout(() => {
+      world.style.transition = "";
+    }, CAM_MS + 80);
   }, []);
+
+  const moveCamera = useCallback(
+    (view: ViewName, seconds: number) => {
+      const e = engineRef.current!;
+      e.view = view;
+      e.to = e.layout[view];
+      if (onPhone()) {
+        glideCamera();
+        e.cam = { ...e.to };
+        e.camT = 1;
+        e.wake();
+        return;
+      }
+      if (e.reduced || seconds <= 0) {
+        e.cam = { ...e.to };
+        e.camT = 1;
+        return;
+      }
+      e.from = { ...e.cam };
+      e.camT = 0;
+      e.camDur = seconds;
+    },
+    [glideCamera],
+  );
 
   /* ---------------- turning ---------------- */
 
@@ -487,19 +530,46 @@ export default function Hero() {
     [touch],
   );
 
-  const openDish = useCallback((opener?: HTMLElement | null) => {
-    const e = engineRef.current!;
-    if (!e.ready) return;
-    e.target = Math.round(e.target);
-    openerRef.current =
-      opener ?? (document.activeElement as HTMLElement | null);
-    setPortions(1);
-    setAdded(false);
-    setOrderOpen(false);
-    setOpen(true);
-  }, []);
+  const openDish = useCallback(
+    (opener?: HTMLElement | null) => {
+      const e = engineRef.current!;
+      if (!e.ready) return;
+      e.target = Math.round(e.target);
+      if (onPhone()) {
+        // stop the table at once: no spin or flick carries on under the dish
+        e.pos = e.target;
+        e.vel = 0;
+        e.drag = null;
+        // aim the camera now, so the layout change that follows animates once
+        e.view = "detail";
+        glideCamera();
+        e.wake();
+      }
+      openerRef.current =
+        opener ?? (document.activeElement as HTMLElement | null);
+      setPortions(1);
+      setAdded(false);
+      setOrderOpen(false);
+      setListOpen(false);
+      setOpen(true);
+    },
+    [glideCamera],
+  );
 
-  const closeDish = useCallback(() => setOpen(false), []);
+  const pickDish = (index: number) => {
+    goTo(index);
+    setListOpen(false);
+  };
+
+  const closeDish = useCallback(() => {
+    const e = engineRef.current!;
+    if (onPhone()) {
+      e.view = "browse";
+      glideCamera();
+      e.wake();
+    }
+    setOpen(false);
+  }, [glideCamera]);
 
   /* ---------------- the one animation loop ---------------- */
 
@@ -513,21 +583,23 @@ export default function Hero() {
     e.reduced = motionQuery.matches;
 
     const measure = () => {
-      // the stage fills the hero from 768 px up; on a phone it is the table's band
+      // the stage fills the hero from 768 px up; on a phone it is the space
+      // the copy (or an open dish's details) leaves under the nav
       const box = stage.getBoundingClientRect();
-      const el = slotRef.current;
-      const slot =
-        mobileQuery.matches && el && el.offsetWidth > 0
-          ? {
-              x: el.offsetLeft + el.offsetWidth / 2,
-              y: el.offsetTop + el.offsetHeight / 2,
-              d: el.offsetWidth,
-            }
-          : undefined;
+      let slot: Slot | undefined;
+      if (mobileQuery.matches) {
+        const nav = navRef.current;
+        const top = nav ? nav.offsetTop + nav.offsetHeight : 76;
+        const room = box.height - top;
+        // 88% of the width, at most 420 px, and never taller than the room
+        const d = Math.max(96, Math.min(box.width * 0.88, 420, room - 18));
+        slot = { x: box.width / 2, y: top + room / 2, d };
+      }
       e.layout = computeLayout(box.width, box.height, wideQuery.matches, slot);
       e.to = e.layout[e.view];
       if (e.intro >= 0) e.from = e.layout.overview;
       else if (e.camT >= 1) e.cam = { ...e.to };
+      e.wake();
     };
     measure();
     e.cam = { ...e.layout.overview };
@@ -558,6 +630,13 @@ export default function Hero() {
 
     let raf = 0;
     let last = performance.now();
+
+    e.wake = () => {
+      if (!e.asleep) return;
+      e.asleep = false;
+      last = performance.now();
+      raf = requestAnimationFrame(frame);
+    };
 
     const frame = (now: number) => {
       raf = requestAnimationFrame(frame);
@@ -734,11 +813,28 @@ export default function Hero() {
         burstRef.current,
         `rotate(${at}deg) translateY(${-RING}px) rotate(${(-(rot + at)).toFixed(3)}deg)`,
       );
+
+      // Phones: with a dish open nothing is left for the loop to do (the
+      // camera glides on its own), so it stops until something wakes it.
+      if (
+        e.open &&
+        mobileQuery.matches &&
+        e.intro < 0 &&
+        e.camT >= 1 &&
+        !e.drag &&
+        e.pos === e.target
+      ) {
+        cancelAnimationFrame(raf);
+        e.asleep = true;
+      }
     };
 
     raf = requestAnimationFrame(frame);
     return () => {
       cancelAnimationFrame(raf);
+      e.asleep = false;
+      e.wake = () => {};
+      window.clearTimeout(e.camTimer);
       resize.disconnect();
       seen.disconnect();
       wideQuery.removeEventListener("change", measure);
@@ -845,6 +941,25 @@ export default function Hero() {
     }
   }, [open, moveCamera]);
 
+  const listWasOpen = useRef(false);
+  useEffect(() => {
+    if (listOpen) {
+      listWasOpen.current = true;
+      const id = window.setTimeout(
+        () =>
+          listRef.current
+            ?.querySelector<HTMLElement>('.dish-row[aria-current="true"]')
+            ?.focus({ preventScroll: true }),
+        40,
+      );
+      return () => window.clearTimeout(id);
+    }
+    if (listWasOpen.current) {
+      listWasOpen.current = false;
+      listButtonRef.current?.focus({ preventScroll: true });
+    }
+  }, [listOpen]);
+
   useEffect(() => {
     if (!added) return;
     const id = window.setTimeout(() => setAdded(false), 2400);
@@ -868,7 +983,8 @@ export default function Hero() {
       if (el?.closest("input, textarea, select, [contenteditable='true']"))
         return;
       if (ev.key === "Escape") {
-        if (orderRef.current?.querySelector(".order-panel"))
+        if (heroRef.current?.dataset.list === "true") setListOpen(false);
+        else if (orderRef.current?.querySelector(".order-panel"))
           setOrderOpen(false);
         else if (e.open) closeDish();
         return;
@@ -1054,6 +1170,7 @@ export default function Hero() {
       data-phase={phase}
       data-open={open}
       data-drag={dragging}
+      data-list={listOpen}
       aria-roledescription="carousel"
       aria-label="The menu: a round table. Turn it to choose a dish."
     >
@@ -1066,7 +1183,7 @@ export default function Hero() {
       </p>
 
       {/* ---------- nav ---------- */}
-      <header className="hero-nav">
+      <header ref={navRef} className="hero-nav">
         <a
           href="#menu"
           className="block flex-1 leading-none"
@@ -1174,7 +1291,6 @@ export default function Hero() {
         onClick={onStageClick}
       >
         {/* on a phone, the square the whole table is fitted into */}
-        <div ref={slotRef} className="table-slot" aria-hidden />
         <div ref={worldRef} className="world">
           <div className="table-shadow" />
           <div ref={tableRef} className="table">
@@ -1378,7 +1494,7 @@ export default function Hero() {
                   <Arrow flip />
                 </button>
                 <div
-                  className="flex items-center px-1"
+                  className="ticks flex items-center px-1 max-[768px]:hidden"
                   role="group"
                   aria-label="Choose a dish"
                 >
@@ -1395,6 +1511,18 @@ export default function Hero() {
                     />
                   ))}
                 </div>
+                {/* phones: the dots give way to the full list */}
+                <button
+                  ref={listButtonRef}
+                  type="button"
+                  className="all-dishes"
+                  aria-haspopup="dialog"
+                  aria-expanded={listOpen}
+                  aria-controls="dish-list"
+                  onClick={() => setListOpen(true)}
+                >
+                  All dishes ({pad(N)})
+                </button>
                 <button
                   type="button"
                   className="round"
@@ -1419,50 +1547,54 @@ export default function Hero() {
         inert={!open}
       >
         <div className="detail-grip wide:hidden" aria-hidden />
-        <button
-          type="button"
-          className="back stagger"
-          style={css({ "--n": 0 })}
-          onClick={closeDish}
-        >
-          <Arrow flip /> Back to the table
-        </button>
+        {/* phones: this part scrolls and the order bar stays under it; from
+            768 px up it is display: contents and changes nothing */}
+        <div className="detail-body">
+          <button
+            type="button"
+            className="back stagger"
+            style={css({ "--n": 0 })}
+            onClick={closeDish}
+          >
+            <Arrow flip /> Back to the table
+          </button>
 
-        <p
-          className="sheet-title stagger mt-4 wide:hidden"
-          style={css({ "--n": 1 })}
-        >
-          {dish.name[0]} <em>{dish.name[1]}</em>
-        </p>
+          <p
+            className="sheet-title stagger mt-4 wide:hidden"
+            style={css({ "--n": 1 })}
+          >
+            {dish.name[0]} <em>{dish.name[1]}</em>
+          </p>
 
-        <p className="lede stagger mt-3 wide:mt-4" style={css({ "--n": 1 })}>
-          {dish.line}
-        </p>
+          <p className="lede stagger mt-3 wide:mt-4" style={css({ "--n": 1 })}>
+            {dish.line}
+          </p>
 
-        <div className="stagger mt-5" style={css({ "--n": 2 })}>
-          <h3 className="label">On the plate</h3>
-          <ul className="plate-list mt-2.5">
-            {dish.onPlate.map((item) => (
-              <li key={item}>{item}</li>
-            ))}
-          </ul>
+          <div className="stagger mt-5" style={css({ "--n": 2 })}>
+            <h3 className="label">On the plate</h3>
+            <ul className="plate-list mt-2.5">
+              {dish.onPlate.map((item) => (
+                <li key={item}>{item}</li>
+              ))}
+            </ul>
+          </div>
+
+          <dl
+            className="stagger mt-5 grid grid-cols-2 gap-x-6"
+            style={css({ "--n": 3 })}
+          >
+            <div>
+              <dt className="label">Allergens</dt>
+              <dd className="mt-1.5 text-[0.9rem] leading-snug">
+                {dish.allergens}
+              </dd>
+            </div>
+            <div>
+              <dt className="label">We pair</dt>
+              <dd className="mt-1.5 text-[0.9rem] leading-snug">{dish.wine}</dd>
+            </div>
+          </dl>
         </div>
-
-        <dl
-          className="stagger mt-5 grid grid-cols-2 gap-x-6"
-          style={css({ "--n": 3 })}
-        >
-          <div>
-            <dt className="label">Allergens</dt>
-            <dd className="mt-1.5 text-[0.9rem] leading-snug">
-              {dish.allergens}
-            </dd>
-          </div>
-          <div>
-            <dt className="label">We pair</dt>
-            <dd className="mt-1.5 text-[0.9rem] leading-snug">{dish.wine}</dd>
-          </div>
-        </dl>
 
         <div className="detail-bar stagger wide:mt-6" style={css({ "--n": 4 })}>
           <div className="stepper" role="group" aria-label="Portions">
@@ -1491,7 +1623,7 @@ export default function Hero() {
           </div>
           <button
             type="button"
-            className="pill min-w-0 flex-1 wide:flex-none"
+            className="pill min-w-0 flex-1 wide:flex-none max-[768px]:min-w-max"
             data-done={added}
             onClick={addToOrder}
           >
@@ -1504,6 +1636,51 @@ export default function Hero() {
             )}
           </button>
         </div>
+      </div>
+      {/* ---------- phones: every dish in one list ---------- */}
+      <div
+        className="dish-list-backdrop"
+        aria-hidden
+        onClick={() => setListOpen(false)}
+      />
+      <div
+        ref={listRef}
+        id="dish-list"
+        className="dish-list"
+        role="dialog"
+        aria-label="All dishes"
+        inert={!listOpen}
+      >
+        <div className="dish-list-head">
+          <p className="label">The menu · {pad(N)} dishes</p>
+          <button
+            type="button"
+            className="back"
+            onClick={() => setListOpen(false)}
+          >
+            Close
+          </button>
+        </div>
+        <ol>
+          {dishes.map((d, i) => (
+            <li key={d.id}>
+              <button
+                type="button"
+                className="dish-row"
+                aria-current={i === active ? "true" : undefined}
+                onClick={() => pickDish(i)}
+              >
+                <span className="dish-row-num">{pad(i + 1)}</span>
+                <span className="dish-row-name">
+                  {d.name[0]} <em style={{ color: d.accent }}>{d.name[1]}</em>
+                </span>
+                <span className="dish-row-meta">
+                  {d.course} · €{d.price}
+                </span>
+              </button>
+            </li>
+          ))}
+        </ol>
       </div>
     </section>
   );
