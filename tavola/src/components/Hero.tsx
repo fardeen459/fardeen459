@@ -266,7 +266,9 @@ function RingText() {
       const style = getComputedStyle(el);
       ctx.font = `${style.fontWeight} ${style.fontSize} ${style.fontFamily}`;
       const widths = LETTERS.map((ch) => ctx.measureText(ch).width);
-      const gap = (2 * Math.PI * RING_R - widths.reduce((a, b) => a + b, 0)) / LETTERS.length;
+      const gap =
+        (2 * Math.PI * RING_R - widths.reduce((a, b) => a + b, 0)) /
+        LETTERS.length;
       let along = 0;
       setAngles(
         widths.map((w) => {
@@ -386,6 +388,7 @@ export default function Hero() {
   const plateRefs = useRef<(HTMLDivElement | null)[]>([]);
   const shadowRefs = useRef<(HTMLDivElement | null)[]>([]);
   const plateShadowsRef = useRef<HTMLDivElement>(null);
+  const ringRef = useRef<HTMLDivElement>(null);
   const looseShadowsRef = useRef<HTMLDivElement>(null);
   const detailRef = useRef<HTMLDivElement>(null);
   const orderRef = useRef<HTMLDivElement>(null);
@@ -611,11 +614,21 @@ export default function Hero() {
         worldRef.current,
         `translate3d(${e.cam.x.toFixed(2)}px, ${e.cam.y.toFixed(2)}px, 0) scale(${e.cam.s.toFixed(5)})`,
       );
-      put("table", tableRef.current, `rotate(${rot.toFixed(3)}deg)`);
+      // Laptop and tablet: the whole table turns, cloth and all. Phone: the
+      // cloth stays still and only the ring of plates travels round it, so
+      // the phone never has to redraw a huge turning textured cloth.
+      const still = !e.layout.wide;
+      const clothRot = still ? 0 : rot;
+      put("table", tableRef.current, `rotate(${clothRot.toFixed(3)}deg)`);
+      put(
+        "ring",
+        ringRef.current,
+        `rotate(${(still ? rot : 0).toFixed(3)}deg)`,
+      );
       put(
         "light",
         lightRef.current,
-        `rotate(${(-rot).toFixed(3)}deg) scale(${SIZE / 250})`,
+        `rotate(${(-clothRot).toFixed(3)}deg) scale(${SIZE / 250})`,
       );
 
       // The light sits at the upper left of the screen. A screen offset turned
@@ -626,13 +639,16 @@ export default function Hero() {
       const sin = Math.sin(r);
       const psx = PLATE_SHADOW.x * cos + PLATE_SHADOW.y * sin;
       const psy = -PLATE_SHADOW.x * sin + PLATE_SHADOW.y * cos;
+      const rc = (clothRot * Math.PI) / 180;
+      const ccos = Math.cos(rc);
+      const csin = Math.sin(rc);
       put(
         "plate-shadows",
         plateShadowsRef.current,
         `translate(${psx.toFixed(2)}px, ${psy.toFixed(2)}px)`,
       );
-      const lsx = LOOSE_SHADOW.x * cos + LOOSE_SHADOW.y * sin;
-      const lsy = -LOOSE_SHADOW.x * sin + LOOSE_SHADOW.y * cos;
+      const lsx = LOOSE_SHADOW.x * ccos + LOOSE_SHADOW.y * csin;
+      const lsy = -LOOSE_SHADOW.x * csin + LOOSE_SHADOW.y * ccos;
       put(
         "loose-shadows",
         looseShadowsRef.current,
@@ -1105,91 +1121,101 @@ export default function Hero() {
               <div ref={lightRef} className="cloth-light" />
             </div>
 
-            {/* every shadow under every plate */}
-            <div ref={plateShadowsRef} className="plate-shadows" aria-hidden>
-              {dishes.map((d, i) => (
-                <div
-                  key={d.id}
-                  className="plate-shadow"
-                  data-front={i === active}
-                  ref={(el) => {
-                    shadowRefs.current[i] = el;
-                  }}
-                />
-              ))}
-            </div>
+            {/* the plates, their shadows and the fly-out ingredients: on a
+                phone this ring turns on its own over a still cloth */}
+            <div ref={ringRef} className="plate-ring">
+              {/* every shadow under every plate */}
+              <div ref={plateShadowsRef} className="plate-shadows" aria-hidden>
+                {dishes.map((d, i) => (
+                  <div
+                    key={d.id}
+                    className="plate-shadow"
+                    data-front={i === active}
+                    ref={(el) => {
+                      shadowRefs.current[i] = el;
+                    }}
+                  />
+                ))}
+              </div>
 
-            <div ref={burstRef} className="burst" aria-hidden>
-              {dish.ingredients.map((key, i) => {
-                const g = ingredients[key];
-                const spot = burstSpots[i];
+              <div ref={burstRef} className="burst" aria-hidden>
+                {dish.ingredients.map((key, i) => {
+                  const g = ingredients[key];
+                  const spot = burstSpots[i];
+                  return (
+                    <div
+                      key={`${dish.id}-${key}`}
+                      className="burst-item"
+                      style={css({
+                        "--bx": `${spot.x}px`,
+                        "--by": `${spot.y}px`,
+                        "--r": `${spot.rotate}deg`,
+                        "--i": i,
+                        "--size": `${Math.round(g.size * 1.1)}px`,
+                      })}
+                    >
+                      <img
+                        className="burst-shadow"
+                        src={asset(g.shadow)}
+                        alt=""
+                        draggable={false}
+                      />
+                      <img
+                        className="burst-img"
+                        src={asset(g.file)}
+                        alt=""
+                        draggable={false}
+                      />
+                    </div>
+                  );
+                })}
+              </div>
+
+              {dishes.map((d, i) => {
+                const name = `${d.name[0]} ${d.name[1]}`;
+                const isFront = i === active;
+                const label = open
+                  ? isFront
+                    ? `${name}. Back to the table`
+                    : `Back to the table`
+                  : isFront
+                    ? `${name}, ${d.price} euros. View the dish`
+                    : `${name}. Bring to the front`;
                 return (
                   <div
-                    key={`${dish.id}-${key}`}
-                    className="burst-item"
-                    style={css({
-                      "--bx": `${spot.x}px`,
-                      "--by": `${spot.y}px`,
-                      "--r": `${spot.rotate}deg`,
-                      "--i": i,
-                      "--size": `${Math.round(g.size * 1.1)}px`,
-                    })}
+                    key={d.id}
+                    className="plate"
+                    data-front={isFront}
+                    ref={(el) => {
+                      plateRefs.current[i] = el;
+                    }}
                   >
-                    <img
-                      className="burst-shadow"
-                      src={asset(g.shadow)}
-                      alt=""
-                      draggable={false}
-                    />
-                    <img
-                      className="burst-img"
-                      src={asset(g.file)}
-                      alt=""
-                      draggable={false}
-                    />
+                    <button
+                      type="button"
+                      className="plate-btn"
+                      tabIndex={isFront ? 0 : -1}
+                      aria-label={label}
+                      onClick={(ev) => onPlateClick(i, ev)}
+                    >
+                      {/* phones get a lighter 800 px plate; laptops and tablets the full 1200 px */}
+                      <picture>
+                        <source media={WIDE_QUERY} srcSet={asset(d.image)} />
+                        <img
+                          data-wait
+                          src={asset(
+                            d.image.replace("/dishes/", "/dishes/sm/"),
+                          )}
+                          alt=""
+                          width={PLATE}
+                          height={PLATE}
+                          draggable={false}
+                        />
+                      </picture>
+                    </button>
                   </div>
                 );
               })}
             </div>
-
-            {dishes.map((d, i) => {
-              const name = `${d.name[0]} ${d.name[1]}`;
-              const isFront = i === active;
-              const label = open
-                ? isFront
-                  ? `${name}. Back to the table`
-                  : `Back to the table`
-                : isFront
-                  ? `${name}, ${d.price} euros. View the dish`
-                  : `${name}. Bring to the front`;
-              return (
-                <div
-                  key={d.id}
-                  className="plate"
-                  data-front={isFront}
-                  ref={(el) => {
-                    plateRefs.current[i] = el;
-                  }}
-                >
-                  <button
-                    type="button"
-                    className="plate-btn"
-                    tabIndex={isFront ? 0 : -1}
-                    aria-label={label}
-                    onClick={(ev) => onPlateClick(i, ev)}
-                  >
-                    <img
-                      data-wait
-                      src={asset(d.image)}
-                      alt=""
-                      width={PLATE}
-                      height={PLATE}
-                      draggable={false}
-                    />
-                  </button>
-                </div>
-              );
-            })}
           </div>
           <div className="vignette" />
         </div>

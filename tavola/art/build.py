@@ -118,6 +118,9 @@ def main():
         sub = "dishes" if kind == "dish" else "ingredients"
         base = os.path.join(args.out or os.path.join(PUBLIC, sub), name)
         print("wrote", save(arr, base + ext), f"{time.time() - t0:.1f}s", flush=True)
+        if kind == "dish" and not args.out:
+            # phones load a lighter copy
+            save(arr, os.path.join(PUBLIC, "dishes", "sm", name + ext), size=800)
         if kind == "ing":
             # a blurred silhouette: small is plenty, and cheap to decode
             save(shadow_of(arr), base + "-shadow" + ext, quality=80, size=160)

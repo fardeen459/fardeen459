@@ -276,6 +276,17 @@ button {
   }
 
   /* ---- plates --------------------------------------------------- */
+  /* the ring of plates; it turns by itself on a phone (see Hero.tsx) */
+  .plate-ring {
+    position: absolute;
+    inset: 0;
+    will-change: transform;
+  }
+  .plate-btn picture {
+    display: block;
+    width: 100%;
+    height: 100%;
+  }
   .plate {
     position: absolute;
     left: 1000px;
