@@ -24,16 +24,11 @@ Needs Node.js 20.9 or newer.
   in, the other plates fade, four ingredients fly out, and the left column
   shows what is on the plate, allergens, a wine and the order controls.
 - **Close it:** the back link, Escape, the plate, or the empty table.
-- **On a phone** (under 768 px) everything fits one screen (`100dvh`): the
-  whole table with all eight plates in view, and under it the dish, its price,
-  "View the dish", the arrows and an **All dishes (08)** button that opens a
-  full-screen menu of every dish. The phone version is built to stay inside a
-  phone's graphics memory: nothing on the table ever changes size (the camera
-  only slides; an open dish is lifted onto the middle of the cloth as a small
-  separate group), the cloth is one fixed layer that never turns, the floor
-  and cloth colours stay the same for every dish, and pictures are lighter
-  (400 px plates, 256 px ingredients). From 768 px up (tablets, laptops) the
-  layout is the one described above.
+- **On a phone** (under 768 px) the whole table fits the width
+  (`min(88vw, 420px)`) with all eight plates in view, the cloth stays still
+  while the ring of plates turns, and the copy sits below the table in normal
+  page flow. An open dish shows its details there too, under the zoomed plate.
+  From 768 px up (tablets, laptops) the layout is the one described above.
 
 ## Changing the content
 
