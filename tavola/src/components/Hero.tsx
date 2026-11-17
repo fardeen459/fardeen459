@@ -8,6 +8,7 @@ import {
   useEffect,
   useRef,
   useState,
+  useSyncExternalStore,
   type CSSProperties,
   type MouseEvent as ReactMouseEvent,
   type PointerEvent as ReactPointerEvent,
@@ -35,6 +36,13 @@ const HALF = SIZE / 2;
 
 /** must match the `wide` variant in globals.css */
 const WIDE_QUERY = "(min-width: 860px) and (min-aspect-ratio: 21/20)";
+/** phones: must match the `max-width: 767.98px` block in globals.css. 768 px and up is untouched. */
+const MOBILE_QUERY = "(max-width: 767.98px)";
+const subscribeMobile = (onChange: () => void) => {
+  const q = window.matchMedia(MOBILE_QUERY);
+  q.addEventListener("change", onChange);
+  return () => q.removeEventListener("change", onChange);
+};
 /** height of the phone sheet as a share of the hero; matches `.detail` */
 const SHEET = 0.58;
 /** left alone, the table steps on */
@@ -72,8 +80,30 @@ const wrap = (d: number) => {
  * screen and how many pixels one table unit is worth. `front` is the angle
  * (clockwise from 12 o'clock) at which the chosen plate comes to rest.
  */
-function computeLayout(W: number, H: number, wide: boolean): Layout {
+/** On a phone: where the table's square slot sits in the stage (centre and diameter). */
+type Slot = { x: number; y: number; d: number };
+
+function computeLayout(
+  W: number,
+  H: number,
+  wide: boolean,
+  slot?: Slot,
+): Layout {
   const dia = PLATE * (1 + BOOST);
+  if (slot && !wide) {
+    // Phone: the whole table fits its slot under the nav, so every plate on
+    // the ring stays in view (the ring is 35% of the table's width).
+    const sB = slot.d / SIZE;
+    // Open: the front plate and its four fly-out ingredients fill the slot.
+    const sD = slot.d / 960;
+    return {
+      wide: false,
+      front: 0,
+      overview: { x: slot.x, y: slot.y, s: sB * 0.8 },
+      browse: { x: slot.x, y: slot.y, s: sB },
+      detail: { x: slot.x, y: slot.y + RING * sD, s: sD },
+    };
+  }
   if (wide) {
     // The table is pushed down and to the right: the front plate rests at
     // about 11 o'clock and the left third of the screen stays dark floor.
@@ -378,6 +408,13 @@ export default function Hero() {
   const [order, setOrder] = useState<Record<string, number>>({});
   const [orderOpen, setOrderOpen] = useState(false);
   const [say, setSay] = useState("");
+  // On a phone only one dish name is ever in the page: the outgoing one is
+  // dropped at once instead of sliding out past the incoming one.
+  const isMobile = useSyncExternalStore(
+    subscribeMobile,
+    () => window.matchMedia(MOBILE_QUERY).matches,
+    () => false,
+  );
 
   const heroRef = useRef<HTMLElement>(null);
   const stageRef = useRef<HTMLDivElement>(null);
@@ -389,6 +426,7 @@ export default function Hero() {
   const shadowRefs = useRef<(HTMLDivElement | null)[]>([]);
   const plateShadowsRef = useRef<HTMLDivElement>(null);
   const ringRef = useRef<HTMLDivElement>(null);
+  const slotRef = useRef<HTMLDivElement>(null);
   const looseShadowsRef = useRef<HTMLDivElement>(null);
   const detailRef = useRef<HTMLDivElement>(null);
   const orderRef = useRef<HTMLDivElement>(null);
@@ -468,13 +506,25 @@ export default function Hero() {
   useEffect(() => {
     const e = engineRef.current!;
     const hero = heroRef.current!;
+    const stage = stageRef.current!;
     const wideQuery = window.matchMedia(WIDE_QUERY);
+    const mobileQuery = window.matchMedia(MOBILE_QUERY);
     const motionQuery = window.matchMedia("(prefers-reduced-motion: reduce)");
     e.reduced = motionQuery.matches;
 
     const measure = () => {
-      const box = hero.getBoundingClientRect();
-      e.layout = computeLayout(box.width, box.height, wideQuery.matches);
+      // the stage fills the hero from 768 px up; on a phone it is the table's band
+      const box = stage.getBoundingClientRect();
+      const el = slotRef.current;
+      const slot =
+        mobileQuery.matches && el && el.offsetWidth > 0
+          ? {
+              x: el.offsetLeft + el.offsetWidth / 2,
+              y: el.offsetTop + el.offsetHeight / 2,
+              d: el.offsetWidth,
+            }
+          : undefined;
+      e.layout = computeLayout(box.width, box.height, wideQuery.matches, slot);
       e.to = e.layout[e.view];
       if (e.intro >= 0) e.from = e.layout.overview;
       else if (e.camT >= 1) e.cam = { ...e.to };
@@ -487,7 +537,9 @@ export default function Hero() {
     };
     const resize = new ResizeObserver(measure);
     resize.observe(hero);
+    resize.observe(stage);
     wideQuery.addEventListener("change", measure);
+    mobileQuery.addEventListener("change", measure);
     motionQuery.addEventListener("change", onMotion);
 
     const seen = new IntersectionObserver(
@@ -690,6 +742,7 @@ export default function Hero() {
       resize.disconnect();
       seen.disconnect();
       wideQuery.removeEventListener("change", measure);
+      mobileQuery.removeEventListener("change", measure);
       motionQuery.removeEventListener("change", onMotion);
     };
   }, []);
@@ -764,6 +817,15 @@ export default function Hero() {
     e.lastTouch = performance.now();
     if (!e.ready) return;
     moveCamera(open ? "detail" : "browse", open ? 1.05 : 0.9);
+    if (open && window.matchMedia(MOBILE_QUERY).matches) {
+      const hero = heroRef.current;
+      if (hero && hero.getBoundingClientRect().top < -8) {
+        hero.scrollIntoView({
+          block: "start",
+          behavior: e.reduced ? "auto" : "smooth",
+        });
+      }
+    }
     if (open) {
       // the detail region takes focus once it is on its way in
       const id = window.setTimeout(
@@ -910,12 +972,18 @@ export default function Hero() {
     }
     // How far did the pointer travel along the rim? Divide by the radius it is
     // pushing at and you have the angle, so the table moves with the hand.
-    const box = heroRef.current!.getBoundingClientRect();
+    const box = stageRef.current!.getBoundingClientRect();
     const rx = d.x - (box.left + e.cam.x);
     const ry = d.y - (box.top + e.cam.y);
     const r = Math.hypot(rx, ry) || 1;
     const along = ((ev.clientX - d.x) * -ry + (ev.clientY - d.y) * rx) / r;
-    const lever = Math.max(r, RING * e.cam.s * 0.5);
+    // On a phone the whole table is small, so the rim is short: push against a
+    // longer lever there, or one ordinary swipe would spin past three dishes.
+    const lever = Math.max(
+      r,
+      RING * e.cam.s * 0.5,
+      isMobile ? SIZE * e.cam.s * 0.75 : 0,
+    );
     e.target -= ((along / lever) * 180) / Math.PI / STEP;
     d.x = ev.clientX;
     d.y = ev.clientY;
@@ -1105,6 +1173,8 @@ export default function Hero() {
         onPointerCancel={endDrag}
         onClick={onStageClick}
       >
+        {/* on a phone, the square the whole table is fitted into */}
+        <div ref={slotRef} className="table-slot" aria-hidden />
         <div ref={worldRef} className="world">
           <div className="table-shadow" />
           <div ref={tableRef} className="table">
@@ -1242,7 +1312,7 @@ export default function Hero() {
             </p>
 
             <h2 className="title" aria-label={fullName}>
-              {prev !== null && prev !== active && (
+              {!isMobile && prev !== null && prev !== active && (
                 <span
                   key={`out-${prev}`}
                   className="title-layer is-out"

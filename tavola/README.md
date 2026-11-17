@@ -24,8 +24,11 @@ Needs Node.js 20.9 or newer.
   in, the other plates fade, four ingredients fly out, and the left column
   shows what is on the plate, allergens, a wine and the order controls.
 - **Close it:** the back link, Escape, the plate, or the empty table.
-- **On a phone** the plate sits near the top with its neighbours peeking in,
-  the copy sits at the bottom, and the details rise as a sheet.
+- **On a phone** (under 768 px) the whole table fits the width
+  (`min(88vw, 420px)`) with all eight plates in view, the cloth stays still
+  while the ring of plates turns, and the copy sits below the table in normal
+  page flow. An open dish shows its details there too, under the zoomed plate.
+  From 768 px up (tablets, laptops) the layout is the one described above.
 
 ## Changing the content
 

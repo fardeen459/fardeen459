@@ -945,6 +945,132 @@ button {
       display: none;
     }
   }
+
+  /* only used on a phone (see below) */
+  .table-slot {
+    display: none;
+  }
+
+  /* ================================================================
+     Phones (under 768 px). Nothing in this block applies from 768 px up,
+     so tablets and laptops are untouched.
+
+     The whole table fits the screen's width with every plate in view, the
+     copy sits below it in normal flow (it can never cover the food), and
+     an open dish shows its details there too, as ordinary page content.
+     Keeping the table this small is also what keeps the phone inside its
+     graphics memory: the old layout drew it ~2.5x wider than the screen,
+     and when memory ran out Chrome left parts of layers unpainted (the cut
+     linen patch, vanishing plates, a blank detail panel).
+     ================================================================ */
+  @media (max-width: 767.98px) {
+    .hero {
+      /* the table's diameter: 88% of the width, at most 420 px, and short
+         enough that a phone held sideways still shows all of it */
+      --table-d: min(88vw, 420px, calc(100svh - 8rem));
+      --nav-space: calc(4.75rem + env(safe-area-inset-top, 0px));
+      height: auto;
+      min-height: 100dvh;
+      /* clip, not hidden: hidden would make the hero a scroll box and stop
+         the order bar from sticking to the bottom of the screen */
+      overflow: clip;
+    }
+
+    /* the table's own band under the nav; it clips the zoom when a dish opens */
+    .stage {
+      position: relative;
+      inset: auto;
+      height: calc(var(--nav-space) + var(--table-d) + 2rem);
+      overflow: hidden;
+    }
+    .table-slot {
+      display: block;
+      position: absolute;
+      left: 50%;
+      top: var(--nav-space);
+      width: var(--table-d);
+      height: var(--table-d);
+      margin-left: calc(var(--table-d) / -2);
+      visibility: hidden;
+      pointer-events: none;
+    }
+
+    /* The cloth stays still on a phone (only the ring of plates turns), so
+       its pieces can share one layer, clipped round by their parent. */
+    .table,
+    .cloth-tint,
+    .cloth-light,
+    .loose,
+    .loose-shadows,
+    .cloth-lettering {
+      will-change: auto;
+    }
+    .cloth {
+      border-radius: 50%;
+      overflow: hidden;
+    }
+    .cloth-tint,
+    .cloth-weave {
+      inset: 0;
+      width: 100%;
+      height: 100%;
+    }
+
+    /* the copy is on plain floor now, below the table */
+    .scrim {
+      display: none;
+    }
+    .copy {
+      position: relative;
+      z-index: 20;
+      left: auto;
+      right: auto;
+      bottom: auto;
+      padding: 0.25rem var(--gutter) max(1.75rem, env(safe-area-inset-bottom));
+    }
+    .hero[data-open="true"] .copy {
+      display: none;
+    }
+    /* only the active dish's name, ever (Hero.tsx also skips rendering it) */
+    .title-layer.is-out {
+      display: none;
+    }
+
+    /* the open dish: ordinary content under the table, not an overlay */
+    .detail {
+      display: none;
+      position: relative;
+      inset: auto;
+      z-index: 20;
+      width: auto;
+      height: auto;
+      overflow: visible;
+      padding: 0.25rem var(--gutter) 0;
+      border-radius: 0;
+      background: none;
+      box-shadow: none;
+      visibility: visible;
+      opacity: 1;
+      transform: none;
+      transition: none;
+    }
+    .hero[data-open="true"] .detail {
+      display: block;
+      visibility: visible;
+      opacity: 1;
+      transform: none;
+      transition: none;
+    }
+    .detail-grip {
+      display: none;
+    }
+    /* stays at the bottom of the screen while the details scroll */
+    .detail-bar {
+      margin-inline: calc(var(--gutter) * -1);
+      padding: 0.9rem var(--gutter) max(1.1rem, env(safe-area-inset-bottom));
+      background: var(--floor);
+    }
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {
