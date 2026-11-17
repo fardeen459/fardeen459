@@ -105,7 +105,15 @@ function computeLayout(W: number, H: number, wide: boolean): Layout {
   }
   // Phone: the plate sits near the top, the table hangs below the middle of
   // the screen and the neighbours peek in from both sides.
-  const sB = clamp(Math.min((W * 0.74) / dia, (H * 0.37) / dia), 0.18, 1.2);
+  // On a tablet held upright the camera stands further back: the front plate
+  // takes half the width instead of three quarters, so more of the table shows.
+  // Phones (480 px and narrower) are unchanged; between, it eases from one to the other.
+  const far = clamp((W - 480) / 320, 0, 1);
+  const sB = clamp(
+    Math.min((W * (0.74 - 0.24 * far)) / dia, (H * (0.37 - 0.07 * far)) / dia),
+    0.18,
+    1.2,
+  );
   const yB = Math.max(70 + (dia * sB) / 2 + 10, H * 0.3);
   // Open: the plate shrinks to sit, with its ingredients, above the sheet.
   const room = H * (1 - SHEET) - 58;
