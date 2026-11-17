@@ -1,0 +1,1416 @@
+@import "tailwindcss";
+
+/* One breakpoint decides the whole composition: a landscape screen gets the
+   table pushed to the lower right with the copy on the left; anything else
+   gets the table under the plate and the copy at the bottom. Hero.tsx reads
+   the very same query, so layout and camera can never disagree. */
+@custom-variant wide (@media (min-width: 860px) and (min-aspect-ratio: 21/20));
+
+@theme inline {
+  --font-serif:
+    var(--font-fraunces), "Iowan Old Style", "Palatino Linotype", Georgia, serif;
+  --font-sans: var(--font-dm-sans), ui-sans-serif, system-ui, sans-serif;
+  --color-cream: #f5ede1;
+  --color-ink: #17110e;
+}
+
+html {
+  color-scheme: dark;
+  background: var(--color-ink);
+  scroll-behavior: smooth;
+}
+
+body {
+  font-family: var(--font-sans);
+  font-size: 1rem;
+  line-height: 1.5;
+  color: var(--color-cream);
+  background: var(--color-ink);
+}
+
+button {
+  cursor: pointer;
+}
+
+@layer components {
+  /* ================================================================
+     Hero shell
+     ================================================================ */
+  .hero {
+    --gutter: clamp(1.25rem, 3.4vw, 4rem);
+    --title: clamp(2.3rem, min(11.5vw, 6.6svh), 3.5rem);
+    --copy-top: clamp(5.75rem, 20svh, 13.5rem);
+    --line: rgb(245 237 225 / 0.16);
+    --muted: rgb(245 237 225 / 0.68);
+    position: relative;
+    height: 100svh;
+    min-height: 35rem;
+    overflow: hidden;
+    isolation: isolate;
+    background-color: var(--color-ink);
+    color: var(--color-cream);
+    /* no overscroll-behavior here: on a clipped box it stops a slightly
+       diagonal trackpad scroll from reaching the page at all */
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  /* Per-dish colours fade only on a few plain-colour layers (.floor, .scrim,
+     .cloth-tint). Fading the variables on .hero itself restyles the whole
+     page every frame and starves the turning animation. */
+  .floor {
+    position: absolute;
+    inset: 0;
+    z-index: -1;
+    background-color: var(--floor);
+    transition: background-color 1.3s ease;
+    will-change: transform;
+  }
+
+  /* the floor: faint boards and a vignette */
+  .hero::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    z-index: 0;
+    pointer-events: none;
+    background:
+      radial-gradient(
+        120% 95% at 68% 58%,
+        transparent 38%,
+        rgb(0 0 0 / 0.4) 100%
+      ),
+      repeating-linear-gradient(
+        90deg,
+        rgb(255 255 255 / 0.028) 0 1px,
+        transparent 1px 7.5rem
+      ),
+      repeating-linear-gradient(
+        90deg,
+        rgb(0 0 0 / 0.06) 0 2.6rem,
+        transparent 2.6rem 7.5rem
+      );
+  }
+
+  .hero :is(a, button):focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 3px;
+    border-radius: 4px;
+  }
+
+  @variant wide {
+    .hero {
+      --title: clamp(2.5rem, min(3.9vw, 8svh), 4.6rem);
+    }
+  }
+
+  /* ================================================================
+     Stage: world (camera) > table (rotation) > cloth + plates
+     ================================================================ */
+  .stage {
+    position: absolute;
+    inset: 0;
+    z-index: 1;
+    touch-action: pan-y;
+    user-select: none;
+    -webkit-user-select: none;
+  }
+
+  .world {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 0;
+    height: 0;
+    transform-origin: 0 0;
+    will-change: transform;
+    opacity: 0;
+    transition: opacity 0.9s ease;
+  }
+  .hero:not([data-phase="loading"]) .world {
+    opacity: 1;
+  }
+
+  /* the table's own shadow on the floor; it does not turn */
+  .table-shadow {
+    position: absolute;
+    left: -1000px;
+    top: -1000px;
+    width: 2000px;
+    height: 2000px;
+    border-radius: 50%;
+    pointer-events: none;
+    transform: translate(36px, 62px) scale(1.07);
+    background: radial-gradient(
+      closest-side,
+      rgb(0 0 0 / 0.6) 84%,
+      rgb(0 0 0 / 0.26) 92%,
+      transparent 100%
+    );
+  }
+
+  .table {
+    position: absolute;
+    left: -1000px;
+    top: -1000px;
+    width: 2000px;
+    height: 2000px;
+    will-change: transform;
+    cursor: grab;
+  }
+  .hero[data-drag="true"] .table,
+  .hero[data-drag="true"] .plate-btn {
+    cursor: grabbing;
+  }
+  .hero[data-open="true"] .table {
+    cursor: zoom-out;
+  }
+
+  /* ---- the cloth ------------------------------------------------ */
+  /* No overflow clip here on purpose: a round clip on a turning box makes the
+     browser draw the whole cloth off-screen and mask it on every frame. Each
+     layer is round itself instead, and everything else lies inside the circle. */
+  .cloth {
+    position: absolute;
+    inset: 0;
+  }
+  /* The dish's tint is a plain colour layer, so fading it repaints nothing.
+     The weave lies over it as black with alpha = 1 - linen, which gives
+     exactly tint x linen (what a multiply blend would) with no blending. */
+  .cloth-tint {
+    position: absolute;
+    inset: 0;
+    border-radius: 50%;
+    background-color: var(--tint);
+    transition: background-color 1.3s ease;
+    will-change: transform;
+  }
+  .cloth-weave {
+    position: absolute;
+    inset: 0;
+    border-radius: 50%;
+    background-size: 500px 500px;
+  }
+
+  /* the cloth's edge shading, drawn once in the world (not on the turning
+     table) so rotating never re-rasterises it */
+  .vignette {
+    position: absolute;
+    left: -1000px;
+    top: -1000px;
+    width: 2000px;
+    height: 2000px;
+    border-radius: 50%;
+    pointer-events: none;
+    background: radial-gradient(
+      closest-side,
+      transparent 90%,
+      rgb(50 30 20 / 0.28) 100%
+    );
+  }
+
+  .cloth-lettering {
+    position: absolute;
+    inset: 0;
+    transition: opacity 0.6s ease;
+    /* its own layer from the start, so fading it out never repaints the cloth */
+    will-change: opacity;
+  }
+  .cloth-lettering svg {
+    display: block;
+    width: 100%;
+    height: 100%;
+  }
+  /* a zero-size box at the centre of the cloth; each letter stands on the
+     ring with its foot on the circle, turned about the centre */
+  .ring-text {
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    width: 0;
+    height: 0;
+    font-family: var(--font-serif);
+    font-size: 27px;
+    font-weight: 560;
+    line-height: 1;
+    color: rgb(72 50 40 / 0.5);
+  }
+  .ring-text span {
+    position: absolute;
+    left: -1em;
+    bottom: 0;
+    width: 2em;
+    text-align: center;
+    white-space: pre;
+    transform-origin: 50% 100%;
+  }
+  .stitch {
+    fill: none;
+    stroke: rgb(72 50 40 / 0.3);
+    stroke-width: 2.5;
+    stroke-dasharray: 11 8;
+    stroke-linecap: round;
+  }
+  .hem {
+    fill: none;
+    stroke: rgb(72 50 40 / 0.2);
+    stroke-width: 3;
+    stroke-dasharray: 15 10;
+    stroke-linecap: round;
+  }
+
+  /* All loose ingredients fade as one group. Their shadows sit together in
+     one layer that is shifted each frame so the light stays put; the
+     ingredients themselves never move against the cloth. */
+  .loose {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    transition: opacity 0.6s ease;
+    will-change: opacity;
+  }
+  .loose-shadows {
+    position: absolute;
+    inset: 0;
+    opacity: 0.55;
+    will-change: transform;
+  }
+  .loose img {
+    position: absolute;
+    max-width: none;
+  }
+
+  /* fixed light from the upper left: counter-rotated every frame. Drawn
+     small and scaled up, a gradient does not need 2000 px of texture. */
+  .cloth-light {
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    border-radius: 50%;
+    width: 250px;
+    height: 250px;
+    margin: -125px 0 0 -125px;
+    will-change: transform;
+    pointer-events: none;
+    background:
+      radial-gradient(
+        78% 78% at 24% 20%,
+        rgb(255 248 236 / 0.3),
+        transparent 64%
+      ),
+      radial-gradient(88% 88% at 80% 86%, rgb(40 22 12 / 0.36), transparent 66%);
+  }
+
+  /* ---- plates --------------------------------------------------- */
+  /* the ring of plates; it turns by itself on a phone (see Hero.tsx) */
+  .plate-ring {
+    position: absolute;
+    inset: 0;
+    will-change: transform;
+  }
+  .plate-btn picture {
+    display: block;
+    width: 100%;
+    height: 100%;
+  }
+  .plate {
+    position: absolute;
+    left: 1000px;
+    top: 1000px;
+    width: 0;
+    height: 0;
+    will-change: transform;
+    transition: opacity 0.7s ease;
+  }
+
+  /* Shadows are round, so they never need turning: they sit on the ring with
+     their plates, and the whole set is shifted each frame so the light always
+     comes from the same side of the screen. */
+  .plate-shadows {
+    position: absolute;
+    left: 1000px;
+    top: 1000px;
+    width: 0;
+    height: 0;
+    pointer-events: none;
+    will-change: transform;
+  }
+  .plate-shadow {
+    position: absolute;
+    left: -230px;
+    top: -230px;
+    width: 460px;
+    height: 460px;
+    border-radius: 50%;
+    will-change: transform;
+    pointer-events: none;
+    transition: opacity 0.7s ease;
+    background: radial-gradient(
+      closest-side,
+      rgb(34 18 10 / 0.6) 64%,
+      rgb(34 18 10 / 0.42) 76%,
+      rgb(34 18 10 / 0.2) 87%,
+      rgb(34 18 10 / 0.06) 95%,
+      rgb(34 18 10 / 0) 100%
+    );
+  }
+
+  .plate-btn {
+    position: absolute;
+    left: -230px;
+    top: -230px;
+    width: 460px;
+    height: 460px;
+    display: block;
+    padding: 0;
+    border: 0;
+    border-radius: 50%;
+    background: none;
+    cursor: pointer;
+  }
+  .hero .plate-btn:focus-visible {
+    outline: 6px solid var(--accent);
+    outline-offset: 10px;
+    border-radius: 50%;
+  }
+  .plate-btn img {
+    display: block;
+    width: 100%;
+    height: 100%;
+    pointer-events: none;
+    -webkit-user-drag: none;
+  }
+
+  /* ---- ingredients that fly out of an open dish ----------------- */
+  .burst {
+    position: absolute;
+    left: 1000px;
+    top: 1000px;
+    width: 0;
+    height: 0;
+    pointer-events: none;
+  }
+  .burst-item {
+    --x: calc(var(--bx) * var(--burst-k, 0.9));
+    --y: calc(var(--by) * var(--burst-k, 0.9));
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: var(--size);
+    height: var(--size);
+    margin: calc(var(--size) / -2) 0 0 calc(var(--size) / -2);
+    opacity: 0;
+    transform: translate(0, 0) rotate(calc(var(--r) - 80deg)) scale(0.3);
+    will-change: transform, opacity;
+    transition:
+      transform 0.5s cubic-bezier(0.6, 0, 0.85, 0.25),
+      opacity 0.22s ease 0.24s;
+  }
+  .hero[data-open="true"] .burst-item {
+    opacity: 1;
+    transform: translate(var(--x), var(--y)) rotate(var(--r)) scale(1);
+    /* the curve runs past 1 before it settles: that is the overshoot */
+    transition:
+      transform 1s cubic-bezier(0.3, 1.55, 0.45, 1)
+        calc(0.3s + var(--i) * 0.075s),
+      opacity 0.3s ease calc(0.3s + var(--i) * 0.075s);
+  }
+  .burst-item img {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+  }
+  .burst-shadow {
+    opacity: 0.5;
+    transform: translate(18px, 26px) scale(1.04);
+  }
+  .burst-img {
+    animation: float 6.5s ease-in-out infinite;
+    animation-delay: calc(var(--i) * -1.7s);
+  }
+  @keyframes float {
+    0%,
+    100% {
+      transform: translate(0, 5px) rotate(-1.5deg);
+    }
+    50% {
+      transform: translate(0, -9px) rotate(2.5deg);
+    }
+  }
+
+  /* ---- an open dish clears the table ---------------------------- */
+  .hero[data-open="true"] :is(.plate, .plate-shadow):not([data-front="true"]) {
+    opacity: 0.05;
+  }
+  .hero[data-open="true"] :is(.cloth-lettering, .loose) {
+    opacity: 0;
+  }
+
+  /* ================================================================
+     Scrim: keeps the copy on dark floor whatever the table does
+     ================================================================ */
+  /* A plain floor-coloured layer shaped by a fixed mask: the colour can fade
+     without repainting a full-screen gradient on every frame. */
+  .scrim {
+    --scrim-shape: linear-gradient(
+      to top,
+      #000 0%,
+      #000 24%,
+      rgb(0 0 0 / 0.95) 36%,
+      rgb(0 0 0 / 0.62) 46%,
+      transparent 60%
+    );
+    position: absolute;
+    inset: 0;
+    z-index: 2;
+    pointer-events: none;
+    background-color: var(--floor);
+    transition: background-color 1.3s ease;
+    -webkit-mask-image: var(--scrim-shape);
+    mask-image: var(--scrim-shape);
+    will-change: transform;
+  }
+  @variant wide {
+    .scrim {
+      --scrim-shape: linear-gradient(
+        to right,
+        #000 0%,
+        rgb(0 0 0 / 0.9) 21%,
+        transparent 46%
+      );
+    }
+  }
+
+  /* ================================================================
+     Nav
+     ================================================================ */
+  .hero-nav {
+    position: absolute;
+    z-index: 6;
+    inset: 0 0 auto 0;
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    padding: clamp(1rem, 2.8svh, 1.9rem) var(--gutter);
+    pointer-events: none;
+    transition: opacity 0.8s ease;
+  }
+  /* held back until the fonts and plates are ready, so nothing swaps in */
+  .hero[data-phase="loading"] .hero-nav {
+    opacity: 0;
+  }
+  .hero-nav > * {
+    pointer-events: auto;
+  }
+  .nav-link {
+    font-size: 0.66rem;
+    font-weight: 500;
+    letter-spacing: 0.24em;
+    text-transform: uppercase;
+    color: rgb(245 237 225 / 0.74);
+    transition: color 0.25s ease;
+  }
+  .nav-link:hover {
+    color: var(--color-cream);
+  }
+  .badge {
+    display: grid;
+    place-items: center;
+    min-width: 1.25rem;
+    height: 1.25rem;
+    padding: 0 0.3rem;
+    border-radius: 999px;
+    background-color: var(--accent);
+    color: #1a120e;
+    font-size: 0.62rem;
+    font-weight: 700;
+    letter-spacing: 0;
+    transition: background-color 0.6s ease;
+    animation: bump 0.5s cubic-bezier(0.3, 1.6, 0.5, 1) backwards;
+  }
+  @keyframes bump {
+    from {
+      transform: scale(0.4);
+    }
+  }
+  .order-panel {
+    position: absolute;
+    right: 0;
+    top: calc(100% + 0.8rem);
+    width: min(20.5rem, calc(100vw - 2.5rem));
+    padding: 1.15rem 1.25rem 1.2rem;
+    border-radius: 1rem;
+    border: 1px solid var(--line);
+    background-color: color-mix(in srgb, var(--floor) 80%, #f5ede1);
+    transition: background-color 1.3s ease;
+    box-shadow: 0 1.4rem 3.2rem rgb(0 0 0 / 0.5);
+    animation: fadeUp 0.35s cubic-bezier(0.2, 0.7, 0.2, 1) backwards;
+  }
+
+  /* ================================================================
+     Copy
+     ================================================================ */
+  .copy {
+    position: absolute;
+    z-index: 3;
+    left: var(--gutter);
+    right: var(--gutter);
+    bottom: max(1.35rem, env(safe-area-inset-bottom));
+    pointer-events: none;
+    transition:
+      opacity 0.45s ease,
+      transform 0.6s cubic-bezier(0.2, 0.7, 0.2, 1);
+  }
+  .copy :is(a, button) {
+    pointer-events: auto;
+  }
+  .hero[data-open="true"] .copy {
+    opacity: 0;
+    transform: translateY(1.2rem);
+  }
+  @variant wide {
+    .copy {
+      right: auto;
+      bottom: auto;
+      top: var(--copy-top);
+      width: min(27rem, 31vw);
+    }
+    .hero[data-open="true"] .copy {
+      opacity: 1;
+      transform: none;
+    }
+  }
+
+  .label {
+    font-size: 0.62rem;
+    font-weight: 600;
+    letter-spacing: 0.24em;
+    text-transform: uppercase;
+    color: rgb(245 237 225 / 0.5);
+  }
+
+  .meta {
+    display: flex;
+    align-items: center;
+    gap: 0.7rem;
+    height: 1rem;
+    font-size: 0.64rem;
+    font-weight: 500;
+    letter-spacing: 0.24em;
+    text-transform: uppercase;
+    color: var(--muted);
+    font-variant-numeric: tabular-nums;
+  }
+  .meta .rule {
+    width: 2.2rem;
+    height: 1px;
+    background: currentColor;
+    opacity: 0.55;
+  }
+
+  /* the name: two lines, each rising out of its own mask */
+  .title {
+    position: relative;
+    margin-top: 0.56rem;
+    font-family: var(--font-serif);
+    font-size: var(--title);
+    font-weight: 360;
+    line-height: 1.04;
+    letter-spacing: -0.02em;
+    font-variation-settings:
+      "opsz" 144,
+      "SOFT" 40;
+  }
+  .title-layer {
+    display: block;
+  }
+  .title-layer.is-out {
+    position: absolute;
+    inset: 0;
+  }
+  .mask {
+    display: block;
+    overflow: hidden;
+    /* room for italic overhang and descenders, taken back by the margins */
+    padding: 0.06em 0.16em 0.2em 0.08em;
+    margin: -0.06em -0.16em -0.2em -0.08em;
+  }
+  .line {
+    display: block;
+    white-space: nowrap;
+  }
+  .line.accent {
+    font-style: italic;
+    font-weight: 340;
+    /* each name carries its own dish's colour, so the outgoing one keeps it */
+    color: var(--line-accent, var(--accent));
+  }
+  .is-in .line {
+    animation: rise 0.95s cubic-bezier(0.2, 0.75, 0.2, 1) backwards;
+  }
+  .is-in .mask:nth-child(2) .line {
+    animation-delay: 0.09s;
+  }
+  .is-out .line {
+    animation: leave 0.5s cubic-bezier(0.55, 0, 0.85, 0.35) forwards;
+  }
+  @keyframes rise {
+    from {
+      transform: translateY(calc(125% * var(--dir, 1)));
+    }
+  }
+  @keyframes leave {
+    to {
+      transform: translateY(calc(-125% * var(--dir, 1)));
+    }
+  }
+
+  /* `backwards`, not `both`: a held end state would beat the rules that
+     fade these out again when a dish opens */
+  .fade-up {
+    animation: fadeUp 0.8s cubic-bezier(0.2, 0.7, 0.2, 1) backwards;
+    animation-delay: var(--d, 0s);
+  }
+  @keyframes fadeUp {
+    from {
+      opacity: 0;
+      transform: translateY(0.7rem);
+    }
+  }
+
+  .browse {
+    transition:
+      opacity 0.4s ease,
+      transform 0.6s cubic-bezier(0.2, 0.7, 0.2, 1);
+  }
+  .hero[data-open="true"] .browse {
+    opacity: 0;
+    transform: translateY(0.8rem);
+  }
+  .hero[data-open="true"] .browse :is(a, button) {
+    pointer-events: none;
+  }
+
+  .lede {
+    max-width: 23.5rem;
+    font-size: 0.94rem;
+    line-height: 1.55;
+    color: var(--muted);
+    text-wrap: pretty;
+  }
+
+  .price {
+    font-family: var(--font-serif);
+    font-size: 1.65rem;
+    font-weight: 360;
+    line-height: 1;
+    font-variation-settings: "opsz" 60;
+  }
+
+  .pill {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.65rem;
+    height: 2.6rem;
+    padding: 0 1.2rem;
+    border-radius: 999px;
+    background: var(--color-cream);
+    color: #1c1410;
+    font-size: 0.63rem;
+    font-weight: 700;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    white-space: nowrap;
+    transition:
+      background-color 0.3s ease,
+      color 0.3s ease,
+      transform 0.2s ease;
+  }
+  .hero .pill:focus-visible {
+    border-radius: 999px;
+  }
+  .pill:hover {
+    background: #fff;
+  }
+  .pill:active {
+    transform: scale(0.97);
+  }
+  .pill[data-done="true"] {
+    background: var(--accent);
+  }
+  .pill svg {
+    transition: transform 0.3s ease;
+  }
+  .pill:hover svg {
+    transform: translateX(3px);
+  }
+
+  .round {
+    display: grid;
+    place-items: center;
+    width: 2.5rem;
+    height: 2.5rem;
+    flex: none;
+    border-radius: 50%;
+    border: 1px solid rgb(245 237 225 / 0.32);
+    transition:
+      background-color 0.25s ease,
+      border-color 0.25s ease,
+      color 0.25s ease;
+  }
+  .hero .round:focus-visible {
+    border-radius: 50%;
+  }
+  .round:hover {
+    background: var(--color-cream);
+    border-color: var(--color-cream);
+    color: #1c1410;
+  }
+
+  .tick {
+    display: grid;
+    place-items: center;
+    height: 2.5rem;
+    padding: 0 0.2rem;
+  }
+  .tick::before {
+    content: "";
+    width: 0.95rem;
+    height: 2px;
+    border-radius: 2px;
+    background: rgb(245 237 225 / 0.28);
+    transition:
+      background-color 0.4s ease,
+      width 0.5s cubic-bezier(0.2, 0.7, 0.2, 1);
+  }
+  .tick:hover::before {
+    background: rgb(245 237 225 / 0.75);
+  }
+  .tick[aria-current="true"]::before {
+    width: 1.6rem;
+    background: var(--accent);
+  }
+
+  /* ================================================================
+     Details: a sheet on a phone, the left column on a wide screen
+     ================================================================ */
+  .detail {
+    /* the sticky order bar needs this exact colour behind it */
+    --sheet: color-mix(in srgb, var(--floor) 88%, #f5ede1);
+    position: absolute;
+    z-index: 4;
+    inset: auto 0 0 0;
+    height: 58svh; /* keep in step with SHEET in Hero.tsx */
+    padding: 0 var(--gutter);
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    border-radius: 1.4rem 1.4rem 0 0;
+    background: var(--sheet);
+    box-shadow: 0 -1.5rem 3rem rgb(0 0 0 / 0.4);
+    outline: none;
+    visibility: hidden;
+    transform: translateY(104%);
+    transition:
+      transform 0.55s cubic-bezier(0.5, 0, 0.8, 0.4),
+      visibility 0s linear 0.55s;
+  }
+  .hero[data-open="true"] .detail {
+    visibility: visible;
+    transform: none;
+    transition:
+      transform 0.8s cubic-bezier(0.2, 0.85, 0.2, 1) 0.12s,
+      visibility 0s;
+  }
+  .hero[data-open="true"] .detail .stagger {
+    animation: fadeUp 0.7s cubic-bezier(0.2, 0.7, 0.2, 1) backwards;
+    animation-delay: calc(0.34s + var(--n, 0) * 0.07s);
+  }
+  .detail-grip {
+    width: 2.4rem;
+    height: 4px;
+    margin: 0.7rem auto 0.9rem;
+    border-radius: 4px;
+    background: rgb(245 237 225 / 0.28);
+  }
+  .detail-bar {
+    position: sticky;
+    bottom: 0;
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    margin-top: 1.25rem;
+    padding: 0.9rem 0 max(1rem, env(safe-area-inset-bottom));
+    background: var(--sheet);
+    box-shadow: 0 -1px 0 var(--line);
+  }
+  .back {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.6rem;
+    font-size: 0.62rem;
+    font-weight: 600;
+    letter-spacing: 0.24em;
+    text-transform: uppercase;
+    color: var(--muted);
+    transition: color 0.25s ease;
+  }
+  .back:hover {
+    color: var(--color-cream);
+  }
+  .sheet-title {
+    font-family: var(--font-serif);
+    font-size: 1.9rem;
+    font-weight: 360;
+    line-height: 1.05;
+    letter-spacing: -0.02em;
+    font-variation-settings:
+      "opsz" 144,
+      "SOFT" 40;
+  }
+  .sheet-title em {
+    font-weight: 340;
+    color: var(--accent);
+  }
+  .plate-list li {
+    padding: 0.5rem 0;
+    border-bottom: 1px solid var(--line);
+    font-size: 0.9rem;
+    line-height: 1.35;
+  }
+  .plate-list li:first-child {
+    border-top: 1px solid var(--line);
+  }
+  .stepper {
+    display: flex;
+    align-items: center;
+    height: 2.6rem;
+    flex: none;
+    border-radius: 999px;
+    border: 1px solid rgb(245 237 225 / 0.32);
+    font-variant-numeric: tabular-nums;
+  }
+  .stepper button {
+    display: grid;
+    place-items: center;
+    width: 2.3rem;
+    height: 100%;
+    border-radius: 999px;
+    font-size: 1rem;
+    color: var(--muted);
+    transition: color 0.2s ease;
+  }
+  .stepper button:hover:not(:disabled) {
+    color: var(--color-cream);
+  }
+  .stepper button:disabled {
+    opacity: 0.35;
+    cursor: default;
+  }
+  .stepper output {
+    min-width: 1.1rem;
+    text-align: center;
+    font-size: 0.86rem;
+    font-weight: 600;
+  }
+
+  @variant wide {
+    .detail {
+      inset: calc(var(--copy-top) + 1.56rem + var(--title) * 2.08 + 1.35rem)
+        auto auto var(--gutter);
+      width: min(25rem, 29vw);
+      height: auto;
+      padding: 0;
+      overflow: visible;
+      border-radius: 0;
+      background: none;
+      box-shadow: none;
+      opacity: 0;
+      transform: translateY(0.9rem);
+      transition:
+        opacity 0.3s ease,
+        transform 0.45s ease,
+        visibility 0s linear 0.45s;
+    }
+    .hero[data-open="true"] .detail {
+      opacity: 1;
+      transition:
+        opacity 0.5s ease 0.2s,
+        transform 0.8s cubic-bezier(0.2, 0.7, 0.2, 1) 0.2s,
+        visibility 0s;
+    }
+    .detail-bar {
+      position: static;
+      padding: 0;
+      background: none;
+      box-shadow: none;
+    }
+    .hero {
+      --burst-k: 1;
+    }
+  }
+
+  /* short landscape windows: tighten the left column so it still fits */
+  @media (min-width: 860px) and (min-aspect-ratio: 21/20) and (max-height: 760px) {
+    .hero {
+      --copy-top: clamp(4.75rem, 14svh, 9rem);
+      --title: clamp(2.3rem, min(3.9vw, 7.2svh), 4.6rem);
+    }
+    .plate-list li {
+      padding: 0.3rem 0;
+      font-size: 0.85rem;
+    }
+    .lede {
+      font-size: 0.88rem;
+      line-height: 1.5;
+    }
+    .detail > * {
+      --tight: 0.8rem;
+    }
+    .detail > :is(div, dl, p) {
+      margin-top: var(--tight);
+    }
+  }
+  @media (min-width: 860px) and (min-aspect-ratio: 21/20) and (max-height: 620px) {
+    /* the sentence is already known from the table view */
+    .detail-body > .lede {
+      display: none;
+    }
+  }
+
+  /* Phone-only pieces. From 768 px up they generate no box at all:
+     .detail-body is display: contents, so the detail panel lays out
+     exactly as before. */
+  .detail-body {
+    display: contents;
+  }
+  .all-dishes,
+  .dish-list,
+  .focus {
+    display: none;
+  }
+  @keyframes fadeIn {
+    from {
+      opacity: 0;
+    }
+  }
+
+  /* ================================================================
+     Phones (under 768 px). Nothing in this block applies from 768 px up,
+     so tablets and laptops are untouched.
+
+     Built to stay inside a phone's graphics memory, which is what ran out
+     before (plates and the linen dropping out, a blank list):
+     - nothing on the table ever changes size: the camera only slides, and
+       an open dish is a small separate group lifted onto the cloth;
+     - the cloth is one fixed layer, painted once;
+     - steady colours (espresso floor, neutral linen), so nothing is
+       repainted when the dish changes;
+     - lighter pictures (Hero.tsx) and fewer layers.
+
+     One screen (100dvh): the table takes the room the text leaves under
+     the nav; the text sits under the table, never over the food.
+     Everything that moves animates transform or opacity only.
+     ================================================================ */
+  @media (max-width: 767.98px) {
+    .hero {
+      --floor: #1f120d !important;
+      --tint: #e9dfd2 !important;
+      height: 100dvh;
+      min-height: 0;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      background-color: #1f120d;
+    }
+    /* the floor colour no longer changes, so it needs no layer of its own */
+    .floor {
+      display: none;
+    }
+    .stage {
+      position: relative;
+      inset: auto;
+      flex: 1 1 auto;
+      min-height: 0;
+      overflow: hidden;
+    }
+    /* where the table area meets the text, the cloth fades into the floor
+       instead of being cut by a hard straight edge */
+    .stage::after {
+      content: "";
+      position: absolute;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      height: 2.75rem;
+      z-index: 1;
+      pointer-events: none;
+      background: linear-gradient(to top, #1f120d, rgb(31 18 13 / 0));
+    }
+
+    /* The cloth: one fixed layer, painted once, clipped round. It never
+       turns on a phone (only the ring of plates does), never changes size
+       and never changes colour. */
+    .cloth {
+      border-radius: 50%;
+      overflow: hidden;
+      transform: translateZ(0);
+      backface-visibility: hidden;
+    }
+    .table,
+    .cloth-tint,
+    .cloth-light,
+    .loose,
+    .loose-shadows,
+    .cloth-lettering {
+      will-change: auto;
+    }
+    .cloth-tint {
+      border-radius: 0;
+      transition: none;
+    }
+    /* the lettering and loose ingredients stay put when a dish opens: the
+       lifted plate covers the middle of the cloth anyway */
+    .hero[data-open="true"] :is(.cloth-lettering, .loose) {
+      opacity: 1;
+    }
+    .vignette,
+    .burst,
+    .scrim {
+      display: none;
+    }
+
+    /* ---- the ring of plates when a dish opens ---- */
+    .plate,
+    .plate-shadow {
+      transition: opacity 0.28s ease;
+    }
+    /* the front plate hands over to its lifted copy, and takes over again
+       once the copy has settled back on the ring */
+    .plate[data-front="true"],
+    .plate-shadow[data-front="true"] {
+      transition: opacity 0.1s linear 0.24s;
+    }
+    .hero[data-open="true"] :is(.plate, .plate-shadow)[data-front="true"] {
+      opacity: 0;
+      transition: opacity 0.1s linear 0.04s;
+    }
+
+    /* ---- the open dish, lifted onto the middle of the cloth ----
+       Sizes are in table units (the cloth is 2000 across); the group starts
+       exactly over the front plate and grows to the centre. */
+    .focus {
+      display: block;
+      position: absolute;
+      left: 0;
+      top: 0;
+      width: 0;
+      height: 0;
+      pointer-events: none;
+      visibility: hidden;
+      transition: visibility 0s linear 0.36s;
+    }
+    .hero[data-open="true"] .focus {
+      visibility: visible;
+      transition: none;
+    }
+    .focus-dish {
+      position: absolute;
+      left: -560px;
+      top: -560px;
+      width: 1120px;
+      height: 1120px;
+      opacity: 0;
+      transform: translate(0, -700px) scale(0.5134);
+      will-change: transform, opacity;
+      transition:
+        transform 0.3s cubic-bezier(0.22, 1, 0.36, 1),
+        opacity 0.1s linear 0.26s;
+    }
+    .hero[data-open="true"] .focus-dish {
+      opacity: 1;
+      transform: none;
+      transition:
+        transform 0.3s cubic-bezier(0.22, 1, 0.36, 1),
+        opacity 0.08s linear;
+    }
+    .focus-plate {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      max-width: none;
+    }
+    .focus-shadow {
+      position: absolute;
+      inset: 0;
+      border-radius: 50%;
+      transform: translate(64px, 90px) scale(1.12);
+      background: radial-gradient(
+        closest-side,
+        rgb(34 18 10 / 0.55) 64%,
+        rgb(34 18 10 / 0.3) 82%,
+        rgb(34 18 10 / 0) 100%
+      );
+    }
+    .focus-garnish {
+      position: absolute;
+      left: calc(var(--gx) - 160px);
+      top: calc(var(--gy) - 160px);
+      width: 320px;
+      height: 320px;
+      max-width: none;
+      opacity: 0;
+      transform: translate(calc(var(--gx) * -0.45), calc(var(--gy) * -0.45))
+        rotate(var(--gr)) scale(0.4);
+      will-change: transform, opacity;
+      transition:
+        transform 0.2s ease-in,
+        opacity 0.12s linear;
+    }
+    .hero[data-open="true"] .focus-garnish {
+      opacity: 1;
+      transform: rotate(var(--gr));
+      transition:
+        transform 0.3s cubic-bezier(0.22, 1, 0.36, 1)
+          calc(0.08s + var(--i) * 0.03s),
+        opacity 0.16s linear calc(0.08s + var(--i) * 0.03s);
+    }
+
+    /* ---- the text under the table ---- */
+    .copy {
+      position: relative;
+      flex: none;
+      z-index: 20;
+      left: auto;
+      right: auto;
+      bottom: auto;
+      padding: 0.25rem var(--gutter) max(1.1rem, env(safe-area-inset-bottom));
+    }
+    .hero[data-open="true"] .copy {
+      display: none;
+    }
+    /* The name swaps in place with a quick fade: no masks, no sliding, so it
+       is never cut in half while the table turns. Only the active dish's
+       name is ever rendered (Hero.tsx). */
+    .title-layer.is-out {
+      display: none;
+    }
+    .mask {
+      overflow: visible;
+    }
+    .is-in .line,
+    .is-in .mask:nth-child(2) .line {
+      animation: fadeIn 120ms ease-out backwards;
+      animation-delay: 0s;
+    }
+    .copy .fade-up {
+      animation: fadeIn 120ms ease-out backwards;
+      animation-delay: 0s;
+    }
+    /* arrows either side of a button that opens every dish (the dots
+       between the arrows are hidden on phones in Hero.tsx) */
+    .all-dishes {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      flex: 1 1 auto;
+      min-width: 0;
+      height: 2.5rem;
+      padding: 0 1rem;
+      border-radius: 999px;
+      border: 1px solid rgb(245 237 225 / 0.32);
+      color: var(--color-cream);
+      font-size: 0.63rem;
+      font-weight: 700;
+      letter-spacing: 0.2em;
+      text-transform: uppercase;
+      white-space: nowrap;
+    }
+    .all-dishes:active {
+      background: var(--color-cream);
+      color: #1c1410;
+    }
+
+    /* ---- an open dish: its details replace the text, all at once ---- */
+    .detail {
+      display: none;
+      position: relative;
+      inset: auto;
+      z-index: 20;
+      flex: 0 0 56%;
+      min-height: 0;
+      width: auto;
+      height: auto;
+      padding: 0;
+      overflow: visible;
+      border-radius: 0;
+      background: none;
+      box-shadow: none;
+      visibility: visible;
+      opacity: 1;
+      transform: none;
+      transition: none;
+    }
+    .hero[data-open="true"] .detail {
+      display: flex;
+      flex-direction: column;
+      visibility: visible;
+      opacity: 1;
+      transform: none;
+      transition: none;
+    }
+    .hero[data-open="true"] .detail .stagger {
+      animation: none;
+    }
+    .detail-grip {
+      display: none;
+    }
+    .detail-body {
+      display: block;
+      flex: 1 1 auto;
+      min-height: 0;
+      overflow-y: auto;
+      overscroll-behavior: contain;
+      padding: 0.5rem var(--gutter) 1.5rem;
+    }
+    /* under the scrolling details, never over them */
+    .detail-bar {
+      position: relative;
+      flex: none;
+      flex-wrap: wrap;
+      margin: 0;
+      padding: 0.75rem var(--gutter) max(1rem, env(safe-area-inset-bottom));
+      background: #1f120d;
+      box-shadow: 0 -1px 0 var(--line);
+    }
+
+    /* ---- every dish, on its own full screen ---- */
+    .dish-list {
+      display: block;
+      position: fixed;
+      inset: 0;
+      z-index: 50;
+      overflow-y: auto;
+      overscroll-behavior: contain;
+      padding: 0 var(--gutter) max(1.5rem, env(safe-area-inset-bottom));
+      background: #1f120d;
+      color: var(--color-cream);
+      transform: translateY(100%);
+      visibility: hidden;
+      will-change: transform;
+      transition:
+        transform 0.28s cubic-bezier(0.22, 1, 0.36, 1),
+        visibility 0s linear 0.28s;
+    }
+    .hero[data-list="true"] .dish-list {
+      transform: none;
+      visibility: visible;
+      transition: transform 0.28s cubic-bezier(0.22, 1, 0.36, 1);
+    }
+    .dish-list-head {
+      position: sticky;
+      top: 0;
+      z-index: 1;
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 1rem;
+      padding: max(1.1rem, env(safe-area-inset-top)) 0 0.9rem;
+      background: #1f120d;
+      border-bottom: 1px solid var(--line);
+    }
+    .dish-list-title {
+      font-family: var(--font-serif);
+      font-size: 1.9rem;
+      font-weight: 360;
+      line-height: 1.05;
+      letter-spacing: -0.02em;
+    }
+    .dish-list-close {
+      display: grid;
+      place-items: center;
+      flex: none;
+      width: 2.75rem;
+      height: 2.75rem;
+      border-radius: 50%;
+      border: 1px solid rgb(245 237 225 / 0.32);
+      color: var(--color-cream);
+      font-size: 1.05rem;
+      line-height: 1;
+    }
+    .dish-row {
+      display: grid;
+      grid-template-columns: 2rem 1fr auto;
+      column-gap: 0.6rem;
+      align-items: start;
+      width: 100%;
+      padding: 0.95rem 0;
+      border-bottom: 1px solid var(--line);
+      text-align: left;
+    }
+    .dish-row-num {
+      padding-top: 0.1rem;
+      font-size: 0.7rem;
+      letter-spacing: 0.16em;
+      color: rgb(245 237 225 / 0.5);
+      font-variant-numeric: tabular-nums;
+    }
+    .dish-row-text {
+      display: grid;
+      gap: 0.3rem;
+      min-width: 0;
+    }
+    .dish-row-course {
+      font-size: 0.6rem;
+      font-weight: 600;
+      letter-spacing: 0.22em;
+      text-transform: uppercase;
+      color: rgb(245 237 225 / 0.6);
+    }
+    .dish-row-name {
+      font-family: var(--font-serif);
+      font-size: 1.3rem;
+      font-weight: 360;
+      line-height: 1.15;
+    }
+    .dish-row-name em {
+      font-weight: 340;
+    }
+    .dish-row-line {
+      font-size: 0.86rem;
+      line-height: 1.45;
+      color: rgb(245 237 225 / 0.78);
+    }
+    .dish-row-price {
+      padding-top: 1.05rem;
+      font-family: var(--font-serif);
+      font-size: 1.15rem;
+      font-variant-numeric: tabular-nums;
+    }
+    .dish-row[aria-current="true"] .dish-row-num {
+      color: var(--accent);
+    }
+    .hero .dish-row:focus-visible {
+      outline-offset: -2px;
+    }
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+  .hero,
+  .hero *,
+  .hero *::before {
+    animation-duration: 0.01ms !important;
+    animation-delay: 0s !important;
+    transition-duration: 0.01ms !important;
+    transition-delay: 0s !important;
+  }
+  .burst-img {
+    animation: none !important;
+  }
+}
