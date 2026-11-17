@@ -1459,7 +1459,7 @@ export default function Hero() {
             </dd>
           </div>
           <div>
-            <dt className="label">We pour</dt>
+            <dt className="label">We pair</dt>
             <dd className="mt-1.5 text-[0.9rem] leading-snug">{dish.wine}</dd>
           </div>
         </dl>
