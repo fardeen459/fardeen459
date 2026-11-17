@@ -25,11 +25,7 @@ Needs Node.js 20.9 or newer.
   shows what is on the plate, allergens, a wine and the order controls.
 - **Close it:** the back link, Escape, the plate, or the empty table.
 - **On a phone** the plate sits near the top with its neighbours peeking in,
-  the copy sits at the bottom, and the details rise as a sheet. The plate is
-  fitted into the space between the nav and the copy, both measured, so a
-  short in-app viewer or a large system font size never makes them overlap.
-  When there isn't room for a good-sized plate and the sentence, the sentence
-  steps aside (it is still shown when the dish is opened).
+  the copy sits at the bottom, and the details rise as a sheet.
 
 ## Changing the content
 
