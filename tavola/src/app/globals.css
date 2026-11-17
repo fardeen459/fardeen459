@@ -85,9 +85,6 @@ button {
   }
 
   @variant wide {
-    .cloth-light {
-      display: block;
-    }
     .hero {
       --title: clamp(2.5rem, min(3.9vw, 8svh), 4.6rem);
     }
@@ -263,9 +260,7 @@ button {
 
   /* fixed light from the upper left: counter-rotated every frame. Drawn
      small and scaled up, a gradient does not need 2000 px of texture. */
-  /* phones skip it: one less full-screen layer to draw on every frame */
   .cloth-light {
-    display: none;
     position: absolute;
     left: 50%;
     top: 50%;
