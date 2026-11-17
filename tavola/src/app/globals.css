@@ -103,6 +103,9 @@ button {
   }
 
   @variant wide {
+    .cloth-light {
+      display: block;
+    }
     .hero {
       --title: clamp(2.5rem, min(3.9vw, 8svh), 4.6rem);
       --copy-w: min(27rem, 31vw);
@@ -172,11 +175,12 @@ button {
   }
 
   /* ---- the cloth ------------------------------------------------ */
+  /* No overflow clip here on purpose: a round clip on a turning box makes the
+     browser draw the whole cloth off-screen and mask it on every frame. Each
+     layer is round itself instead, and everything else lies inside the circle. */
   .cloth {
     position: absolute;
     inset: 0;
-    border-radius: 50%;
-    overflow: hidden;
   }
   /* The dish's tint is a plain colour layer, so fading it repaints nothing.
      The weave lies over it as black with alpha = 1 - linen, which gives
@@ -184,6 +188,7 @@ button {
   .cloth-tint {
     position: absolute;
     inset: 0;
+    border-radius: 50%;
     background-color: var(--tint);
     transition: background-color 1.3s ease;
     will-change: transform;
@@ -191,6 +196,7 @@ button {
   .cloth-weave {
     position: absolute;
     inset: 0;
+    border-radius: 50%;
     background-size: 500px 500px;
   }
 
@@ -284,10 +290,13 @@ button {
 
   /* fixed light from the upper left: counter-rotated every frame. Drawn
      small and scaled up, a gradient does not need 2000 px of texture. */
+  /* phones skip it: one less full-screen layer to draw on every frame */
   .cloth-light {
+    display: none;
     position: absolute;
     left: 50%;
     top: 50%;
+    border-radius: 50%;
     width: 250px;
     height: 250px;
     margin: -125px 0 0 -125px;
